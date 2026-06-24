@@ -40,7 +40,9 @@ enum BillingService {
     static func status() async -> Bool {
         guard let url = URL(string: "\(baseURL)/v1/billing/status?ref=\(deviceRef)") else { return false }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await Networking.retrying {
+                try await Networking.session.data(from: url)
+            }
             return (try? JSONDecoder().decode(StatusBody.self, from: data))?.active ?? false
         } catch {
             return false
@@ -54,7 +56,9 @@ enum BillingService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Networking.retrying {
+            try await Networking.session.data(for: request)
+        }
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               let body = try? JSONDecoder().decode(URLBody.self, from: data),
               let url = URL(string: body.url) else {
