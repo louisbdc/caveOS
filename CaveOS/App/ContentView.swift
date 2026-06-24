@@ -50,6 +50,10 @@ private enum RootDestination: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    /// Onboarding affiché une seule fois, au premier lancement.
+    @AppStorage("caveos.hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var showOnboarding = false
+
     var body: some View {
         Group {
             if horizontalSizeClass == .regular {
@@ -59,6 +63,16 @@ struct ContentView: View {
             }
         }
         .tint(Theme.wine)
+        .fullScreenCover(isPresented: $showOnboarding) {
+            OnboardingView {
+                hasCompletedOnboarding = true
+                showOnboarding = false
+            }
+            .interactiveDismissDisabled()
+        }
+        .onAppear {
+            if !hasCompletedOnboarding { showOnboarding = true }
+        }
     }
 }
 
