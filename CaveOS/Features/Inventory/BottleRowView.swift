@@ -35,12 +35,14 @@ struct BottleRowView: View {
                 Text(wineName)
                     .font(.headline)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
 
                 if let producerName {
                     Text(producerName)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
 
                 HStack(spacing: Theme.Spacing.s) {
