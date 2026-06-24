@@ -18,19 +18,21 @@ import (
 // billing regroupe la configuration Stripe, chargée depuis l'environnement.
 // La clé secrète n'est JAMAIS dans le code : elle vient de STRIPE_SECRET_KEY (env, hors git).
 type billing struct {
-	priceID       string
-	webhookSecret string
-	publicBaseURL string
-	enabled       bool
+	priceID         string
+	lifetimePriceID string
+	webhookSecret   string
+	publicBaseURL   string
+	enabled         bool
 }
 
 func loadBilling() billing {
 	key := os.Getenv("STRIPE_SECRET_KEY")
 	b := billing{
-		priceID:       os.Getenv("STRIPE_PRICE_ID"),
-		webhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
-		publicBaseURL: os.Getenv("PUBLIC_BASE_URL"),
-		enabled:       key != "" && os.Getenv("STRIPE_PRICE_ID") != "",
+		priceID:         os.Getenv("STRIPE_PRICE_ID"),
+		lifetimePriceID: os.Getenv("STRIPE_LIFETIME_PRICE_ID"),
+		webhookSecret:   os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		publicBaseURL:   os.Getenv("PUBLIC_BASE_URL"),
+		enabled:         key != "" && os.Getenv("STRIPE_PRICE_ID") != "",
 	}
 	if key != "" {
 		stripe.Key = key
@@ -63,13 +65,14 @@ func isActiveStatus(status string) bool {
 }
 
 type refRequest struct {
-	Ref string `json:"ref"`
+	Ref  string `json:"ref"`
+	Kind string `json:"kind"` // "subscription" (défaut) ou "lifetime"
 }
 
-func decodeRef(r *http.Request) string {
+func decodeRequest(r *http.Request) refRequest {
 	var body refRequest
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body)
-	return body.Ref
+	return body
 }
 
 // POST /v1/billing/checkout — crée une session Checkout d'abonnement et renvoie son URL.
@@ -78,19 +81,31 @@ func (s *server) handleCheckout(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "billing non configuré"})
 		return
 	}
-	ref := decodeRef(r)
-	if ref == "" {
+	req := decodeRequest(r)
+	if req.Ref == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "ref requis"})
 		return
 	}
 
+	// Choix du mode : abonnement annuel (récurrent) ou achat « à vie » (paiement unique).
+	mode := stripe.CheckoutSessionModeSubscription
+	price := s.billing.priceID
+	if req.Kind == "lifetime" {
+		if s.billing.lifetimePriceID == "" {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "offre à vie indisponible"})
+			return
+		}
+		mode = stripe.CheckoutSessionModePayment
+		price = s.billing.lifetimePriceID
+	}
+
 	params := &stripe.CheckoutSessionParams{
-		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		Mode: stripe.String(string(mode)),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{{
-			Price:    stripe.String(s.billing.priceID),
+			Price:    stripe.String(price),
 			Quantity: stripe.Int64(1),
 		}},
-		ClientReferenceID: stripe.String(ref),
+		ClientReferenceID: stripe.String(req.Ref),
 		SuccessURL:        stripe.String(s.billing.publicBaseURL + "/billing/success?session_id={CHECKOUT_SESSION_ID}"),
 		CancelURL:         stripe.String(s.billing.publicBaseURL + "/billing/cancel"),
 	}
@@ -130,7 +145,7 @@ func (s *server) handlePortal(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "billing non configuré"})
 		return
 	}
-	ref := decodeRef(r)
+	ref := decodeRequest(r).Ref
 	if ref == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "ref requis"})
 		return

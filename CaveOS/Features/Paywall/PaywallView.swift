@@ -9,7 +9,8 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var isPurchasing = false
-    @State private var showingWebSubscription = false
+    @State private var checkout: IdentifiableURL?
+    @State private var billingError: String?
 
     var body: some View {
         NavigationStack {
@@ -39,8 +40,8 @@ struct PaywallView: View {
                     errorBanner(error)
                 }
             }
-            .sheet(isPresented: $showingWebSubscription) {
-                SubscriptionView()
+            .sheet(item: $checkout, onDismiss: { Task { await pollAfterCheckout() } }) { item in
+                SafariView(url: item.url)
             }
         }
     }
@@ -135,41 +136,28 @@ struct PaywallView: View {
     private var actions: some View {
         VStack(spacing: Theme.Spacing.m) {
             Button {
-                Task { await runPurchase { try await store.purchaseLifetime() } }
+                Task { await startStripe(kind: "lifetime") }
             } label: {
-                purchaseLabel(
-                    title: "Débloquer à vie",
-                    subtitle: lifetimeProductAvailable ? lifetimePrice : "Achat unique"
-                )
+                purchaseLabel(title: "Débloquer à vie", subtitle: lifetimePrice)
             }
             .buttonStyle(.borderedProminent)
             .tint(Theme.wine)
             .disabled(isPurchasing)
 
             Button {
-                Task { await runPurchase { try await store.purchaseSubscription() } }
+                Task { await startStripe(kind: "subscription") }
             } label: {
-                purchaseLabel(
-                    title: "Abonnement annuel",
-                    subtitle: subscriptionProductAvailable ? subscriptionPrice : "Renouvelable chaque année"
-                )
+                purchaseLabel(title: "Abonnement annuel", subtitle: subscriptionPrice)
             }
             .buttonStyle(.bordered)
             .tint(Theme.wine)
-            .disabled(isPurchasing)
-
-            Button {
-                showingWebSubscription = true
-            } label: {
-                Label("S'abonner via le web (Stripe)", systemImage: "globe")
-                    .font(.subheadline)
-            }
             .disabled(isPurchasing)
 
             Button("Restaurer mes achats") {
                 Task {
                     isPurchasing = true
                     await store.restore()
+                    store.setWebSubscription(active: await BillingService.status())
                     isPurchasing = false
                     if store.isPro { dismiss() }
                 }
@@ -181,6 +169,38 @@ struct PaywallView: View {
                 ProgressView()
                     .padding(.top, Theme.Spacing.xs)
             }
+
+            if let billingError {
+                Text(billingError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    // MARK: - Paiement via Stripe
+
+    private func startStripe(kind: String) async {
+        isPurchasing = true
+        billingError = nil
+        defer { isPurchasing = false }
+        do {
+            let url = try await BillingService.startCheckout(kind: kind)
+            checkout = IdentifiableURL(url: url)
+        } catch {
+            billingError = error.localizedDescription
+        }
+    }
+
+    /// Après le retour du Checkout, le webhook peut tarder un peu : on interroge le statut.
+    private func pollAfterCheckout() async {
+        for _ in 0..<6 {
+            if await BillingService.status() {
+                store.setWebSubscription(active: true)
+                dismiss()
+                return
+            }
+            try? await Task.sleep(for: .seconds(2))
         }
     }
 
@@ -213,32 +233,9 @@ struct PaywallView: View {
 
     // MARK: - Helpers prix
 
-    private var lifetimeProductAvailable: Bool { store.lifetimeProduct != nil }
-    private var subscriptionProductAvailable: Bool { store.subscriptionProduct != nil }
+    private var lifetimePrice: String { "50 €" }
+    private var subscriptionPrice: String { "30 € / an" }
 
-    private var lifetimePrice: String {
-        store.lifetimeProduct?.displayPrice ?? "Achat unique"
-    }
-
-    private var subscriptionPrice: String {
-        if let price = store.subscriptionProduct?.displayPrice {
-            return "\(price) / an"
-        }
-        return "—"
-    }
-
-    // MARK: - Achat
-
-    private func runPurchase(_ operation: @escaping () async throws -> Void) async {
-        isPurchasing = true
-        defer { isPurchasing = false }
-        do {
-            try await operation()
-            if store.isPro { dismiss() }
-        } catch {
-            // L'erreur lisible est déjà publiée dans store.purchaseError.
-        }
-    }
 }
 
 #Preview {

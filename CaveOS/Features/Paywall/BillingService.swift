@@ -25,14 +25,15 @@ enum BillingService {
         var errorDescription: String? { "Service d'abonnement indisponible. Réessayez plus tard." }
     }
 
-    /// Crée une session Checkout d'abonnement et renvoie l'URL à ouvrir.
-    static func startCheckout() async throws -> URL {
-        try await postForURL(path: "/v1/billing/checkout")
+    /// Crée une session Checkout et renvoie l'URL à ouvrir.
+    /// - Parameter kind: `"subscription"` (annuel) ou `"lifetime"` (achat unique).
+    static func startCheckout(kind: String = "subscription") async throws -> URL {
+        try await postForURL(path: "/v1/billing/checkout", body: ["ref": deviceRef, "kind": kind])
     }
 
     /// Crée une session du portail client (gestion / annulation).
     static func openPortal() async throws -> URL {
-        try await postForURL(path: "/v1/billing/portal")
+        try await postForURL(path: "/v1/billing/portal", body: ["ref": deviceRef])
     }
 
     /// Indique si l'abonnement est actif pour cet appareil.
@@ -46,12 +47,12 @@ enum BillingService {
         }
     }
 
-    private static func postForURL(path: String) async throws -> URL {
+    private static func postForURL(path: String, body: [String: String]) async throws -> URL {
         guard let endpoint = URL(string: baseURL + path) else { throw BillingError.requestFailed }
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["ref": deviceRef])
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
