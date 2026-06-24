@@ -45,7 +45,11 @@ open CaveOS.xcodeproj       # puis Run sur un simulateur iOS 17+
 
 ## Serveur (API données vin)
 
-Voir [`server/README.md`](server/README.md). Service Go (binaire statique, SQLite pur-Go), endpoints `/v1/wines/search`, `/v1/enrich`, `/v1/db/latest`, `/credits`.
+Voir [`server/README.md`](server/README.md). Service Go (binaire statique, SQLite pur-Go), endpoints `/v1/wines/search`, `/v1/enrich`, `/v1/db/latest`, `/credits`, `/v1/billing/*`.
+
+## 🚀 Mise en ligne
+
+Guide complet pour publier l'app sur l'**App Store** et déployer le **serveur** (API + Stripe, HTTPS) : **[DEPLOY.md](DEPLOY.md)**.
 
 ## Fonctionnalités (CDC couvert)
 
