@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import UserNotifications
+import UIKit
 
 /// Écran de réglages : statut Pro, export CSV, notifications, données et à propos.
 struct SettingsView: View {
@@ -12,7 +14,8 @@ struct SettingsView: View {
     @Environment(\.isPresented) private var isPresented
     @Environment(\.dismiss) private var dismiss
 
-    @State private var notificationsEnabled = false
+    @AppStorage("caveos.apogeeAlertsEnabled") private var notificationsEnabled = false
+    @State private var notificationAuthDenied = false
     @State private var isRequestingAuthorization = false
     @State private var showPaywall = false
     @State private var showImporter = false
@@ -176,15 +179,32 @@ struct SettingsView: View {
             Toggle(isOn: $notificationsEnabled) {
                 Label("Alertes d'apogée", systemImage: "bell.badge")
             }
-            .disabled(isRequestingAuthorization)
+            .disabled(isRequestingAuthorization || notificationAuthDenied)
             .onChange(of: notificationsEnabled) { _, enabled in
                 guard enabled else { return }
                 requestNotificationAuthorization()
             }
+            if notificationAuthDenied {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Autoriser dans les Réglages iOS", systemImage: "arrow.up.forward.app")
+                }
+            }
         } header: {
             Text("Notifications")
         } footer: {
-            Text("Recevez une alerte lorsqu'une bouteille entre dans sa période d'apogée.")
+            Text(notificationAuthDenied
+                ? "Les notifications sont refusées au niveau du système. Activez-les dans Réglages iOS pour recevoir les alertes d'apogée."
+                : "Recevez une alerte lorsqu'une bouteille entre dans sa période d'apogée.")
+        }
+        .task {
+            let status = await notificationService.authorizationStatus()
+            notificationAuthDenied = (status == .denied)
+            if status == .authorized { notificationsEnabled = true }
+            if status == .denied { notificationsEnabled = false }
         }
     }
 
@@ -280,7 +300,9 @@ struct SettingsView: View {
     private func requestNotificationAuthorization() {
         isRequestingAuthorization = true
         Task {
-            await notificationService.requestAuthorization()
+            let status = await notificationService.requestAuthorizationResult()
+            notificationAuthDenied = (status == .denied)
+            if status != .authorized { notificationsEnabled = false }
             isRequestingAuthorization = false
         }
     }

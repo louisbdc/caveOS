@@ -61,6 +61,13 @@ struct BottleRowView: View {
                         color: apogeeStatus.tint,
                         systemImage: apogeeStatus.symbol
                     )
+                    if bottle.state != .inCellar {
+                        StatusBadge(
+                            text: bottle.state.label,
+                            color: stateTint,
+                            systemImage: bottle.state.symbol
+                        )
+                    }
                 }
             }
 
@@ -70,11 +77,18 @@ struct BottleRowView: View {
                 Text("×\(bottle.quantity)")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Theme.wine)
-                Image(systemName: bottle.state.symbol)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, Theme.Spacing.xs)
+        .opacity(bottle.state == .consumed ? 0.5 : 1)
+    }
+
+    /// Couleur du badge d'état : ambre pour entamée, neutre pour consommée.
+    private var stateTint: Color {
+        switch bottle.state {
+        case .opened: return Color(red: 0.85, green: 0.55, blue: 0.20)
+        case .consumed: return Theme.slate
+        case .inCellar: return Theme.slate
+        }
     }
 }

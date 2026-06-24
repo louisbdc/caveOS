@@ -11,6 +11,8 @@ struct PaywallView: View {
     @State private var isPurchasing = false
     @State private var checkout: IdentifiableURL?
     @State private var billingError: String?
+    @State private var purchaseSucceeded = false
+    @State private var isVerifying = false
 
     var body: some View {
         NavigationStack {
@@ -38,6 +40,14 @@ struct PaywallView: View {
             .overlay(alignment: .bottom) {
                 if let error = store.purchaseError {
                     errorBanner(error)
+                }
+            }
+            .overlay {
+                if isVerifying {
+                    verificationOverlay
+                }
+                if purchaseSucceeded {
+                    successOverlay
                 }
             }
             .sheet(item: $checkout, onDismiss: { Task { await pollAfterCheckout() } }) { item in
@@ -163,7 +173,7 @@ struct PaywallView: View {
                     await store.restore()
                     store.setWebSubscription(active: await BillingService.status())
                     isPurchasing = false
-                    if store.isPro { dismiss() }
+                    if store.isPro { await celebrateAndDismiss() }
                 }
             }
             .font(.footnote)
@@ -198,14 +208,53 @@ struct PaywallView: View {
 
     /// Après le retour du Checkout, le webhook peut tarder un peu : on interroge le statut.
     private func pollAfterCheckout() async {
+        isVerifying = true
+        defer { isVerifying = false }
         for _ in 0..<6 {
             if await BillingService.status() {
                 store.setWebSubscription(active: true)
-                dismiss()
+                await celebrateAndDismiss()
                 return
             }
             try? await Task.sleep(for: .seconds(2))
         }
+        billingError = "Paiement non confirmé pour l'instant. S'il a abouti, le déblocage apparaîtra dans un instant ; sinon réessayez."
+    }
+
+    /// Affiche brièvement la confirmation de déblocage avant de fermer.
+    private func celebrateAndDismiss() async {
+        withAnimation { purchaseSucceeded = true }
+        try? await Task.sleep(for: .seconds(1.4))
+        dismiss()
+    }
+
+    private var verificationOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25).ignoresSafeArea()
+            VStack(spacing: Theme.Spacing.s) {
+                ProgressView()
+                Text("Vérification du paiement…")
+                    .font(.subheadline)
+            }
+            .padding(Theme.Spacing.l)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.m))
+        }
+    }
+
+    private var successOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.35).ignoresSafeArea()
+            VStack(spacing: Theme.Spacing.s) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(Theme.gold)
+                Text("CaveOS Pro débloqué ✓")
+                    .font(.headline)
+            }
+            .padding(Theme.Spacing.xl)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.l))
+        }
+        .transition(.scale.combined(with: .opacity))
     }
 
     private func purchaseLabel(title: String, subtitle: String) -> some View {

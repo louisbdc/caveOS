@@ -8,6 +8,19 @@ final class NotificationService {
 
     private let center = UNUserNotificationCenter.current()
 
+    /// Statut d'autorisation iOS actuel (pour refléter l'état réel dans l'UI).
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        await center.notificationSettings().authorizationStatus
+    }
+
+    /// Demande l'autorisation d'envoyer des notifications (alerte, badge, son).
+    /// Retourne le statut résultant.
+    @discardableResult
+    func requestAuthorizationResult() async -> UNAuthorizationStatus {
+        await requestAuthorization()
+        return await authorizationStatus()
+    }
+
     /// Demande l'autorisation d'envoyer des notifications (alerte, badge, son).
     func requestAuthorization() async {
         do {

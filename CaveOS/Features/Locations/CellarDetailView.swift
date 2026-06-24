@@ -161,6 +161,8 @@ private struct LocationCell: View {
         location.bottles.reduce(0) { $0 + $1.quantity }
     }
 
+    private var isFull: Bool { count >= location.capacity }
+
     var body: some View {
         VStack(spacing: 2) {
             Text(location.label)
@@ -170,8 +172,9 @@ private struct LocationCell: View {
             Image(systemName: "wineglass.fill")
                 .font(.caption)
                 .foregroundStyle(count > 0 ? Theme.wine : Color.secondary.opacity(0.3))
-            Text("\(count)")
+            Text("\(count)/\(location.capacity)")
                 .font(.caption.bold())
+                .foregroundStyle(isFull ? Color(red: 0.85, green: 0.55, blue: 0.20) : .primary)
         }
         .frame(maxWidth: .infinity, minHeight: 64)
         .background(
@@ -249,7 +252,8 @@ private struct LocationContentsSheet: View {
                 Button("Vrac (retirer)") { onMove(bottle, nil); dismiss() }
                 Divider()
                 ForEach(targets) { target in
-                    Button("Niv. \(target.levelIndex + 1) · \(target.label)") {
+                    let fill = target.bottles.reduce(0) { $0 + $1.quantity }
+                    Button("Niv. \(target.levelIndex + 1) · \(target.label) (\(fill)/\(target.capacity))") {
                         onMove(bottle, target)
                         dismiss()
                     }

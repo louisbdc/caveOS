@@ -17,6 +17,7 @@ struct CellarEditView: View {
     @State private var columns: Int
     @State private var levels: Int
     @State private var hasBackPositions: Bool
+    @State private var saveError: String?
 
     init(cellar: Cellar? = nil) {
         self.cellar = cellar
@@ -57,11 +58,16 @@ struct CellarEditView: View {
                     Stepper("Colonnes : \(columns)", value: $columns, in: 1...500)
                     Stepper("Niveaux : \(levels)", value: $levels, in: 1...500)
                     Toggle("Positions avant / arrière", isOn: $hasBackPositions)
+                        .disabled(isEditing)
                 } header: {
                     Text("Configuration")
                 } footer: {
-                    let perCell = hasBackPositions ? 2 : 1
-                    Text("\(levels * columns * perCell) emplacement(s) seront générés\(hasBackPositions ? " (avant et arrière)" : ""), chacun d'une capacité de \(rows) bouteille(s).")
+                    if isEditing {
+                        Text("Les dimensions ne régénèrent pas les emplacements existants (vos bouteilles restent en place). Pour repartir d'une grille, créez une nouvelle cave.")
+                    } else {
+                        let perCell = hasBackPositions ? 2 : 1
+                        Text("\(levels * columns * perCell) emplacement(s) seront générés\(hasBackPositions ? " (avant et arrière)" : ""), chacun d'une capacité de \(rows) bouteille(s).")
+                    }
                 }
             }
             .navigationTitle(isEditing ? "Modifier la cave" : "Nouvelle cave")
@@ -74,6 +80,11 @@ struct CellarEditView: View {
                     Button("Enregistrer") { save() }
                         .disabled(!canSave)
                 }
+            }
+            .alert("Échec de l'enregistrement", isPresented: .constant(saveError != nil)) {
+                Button("OK") { saveError = nil }
+            } message: {
+                Text(saveError ?? "")
             }
         }
     }
@@ -126,7 +137,11 @@ struct CellarEditView: View {
             }
         }
 
-        try? context.save()
-        dismiss()
+        do {
+            try context.save()
+            dismiss()
+        } catch {
+            saveError = "Impossible d'enregistrer la cave : \(error.localizedDescription)"
+        }
     }
 }

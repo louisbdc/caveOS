@@ -135,7 +135,10 @@ struct PairingView: View {
                 .font(.headline)
 
             if matches.isEmpty {
-                Text("Aucune bouteille de votre cave ne correspond à cet accord pour le moment.")
+                let hasBottlesInCellar = bottles.contains { $0.state == .inCellar }
+                Text(hasBottlesInCellar
+                    ? "Aucune bouteille de votre cave ne correspond à cet accord pour le moment."
+                    : "Vous n'avez aucune bouteille en cave actuellement. Ajoutez-en pour voir vos accords.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
