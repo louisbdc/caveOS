@@ -24,7 +24,7 @@ struct PaywallView: View {
                 }
                 .padding(Theme.Spacing.l)
             }
-            .background(Theme.cream)
+            .background(Theme.surface)
             .navigationTitle("CaveOS Pro")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

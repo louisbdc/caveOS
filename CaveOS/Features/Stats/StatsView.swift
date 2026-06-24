@@ -40,7 +40,7 @@ struct StatsView: View {
             }
             .padding(Theme.Spacing.m)
         }
-        .background(Theme.cream.opacity(0.4))
+        .background(Theme.surface.opacity(0.4))
     }
 
     // MARK: - Synthèse

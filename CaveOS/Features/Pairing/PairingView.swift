@@ -38,7 +38,7 @@ struct PairingView: View {
                 .padding(Theme.Spacing.m)
             }
             .navigationTitle("Accords mets-vins")
-            .background(Theme.cream.opacity(0.4))
+            .background(Theme.surface.opacity(0.4))
         }
     }
 

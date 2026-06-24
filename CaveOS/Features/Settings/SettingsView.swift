@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var importResult: ImportResult?
     @AppStorage(AppContainer.iCloudSyncKey) private var iCloudSyncEnabled = false
+    @AppStorage(AppearanceMode.storageKey) private var appearanceMode = AppearanceMode.system
 
     private let notificationService = NotificationService()
 
@@ -41,6 +42,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 accountSection
+                appearanceSection
                 exportSection
                 importSection
                 notificationsSection
@@ -73,6 +75,27 @@ struct SettingsView: View {
                     Label("Passer à CaveOS Pro", systemImage: "crown.fill")
                 }
             }
+        }
+    }
+
+    // MARK: - Apparence
+
+    @ViewBuilder
+    private var appearanceSection: some View {
+        Section {
+            Picker(selection: $appearanceMode) {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Label(mode.label, systemImage: mode.systemImage)
+                        .tag(mode)
+                }
+            } label: {
+                Label("Thème", systemImage: "paintbrush")
+            }
+            .pickerStyle(.menu)
+        } header: {
+            Text("Apparence")
+        } footer: {
+            Text("Choisissez le thème clair, sombre, ou laissez CaveOS suivre les réglages de votre appareil.")
         }
     }
 

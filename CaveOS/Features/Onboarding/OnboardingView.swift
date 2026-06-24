@@ -111,7 +111,7 @@ struct OnboardingView: View {
         } label: {
             Text(isLast ? "Commencer" : "Suivant")
                 .font(.headline)
-                .foregroundStyle(Theme.wineDark)
+                .foregroundStyle(Theme.wineDeepest)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.m)
                 .background(
@@ -215,7 +215,7 @@ private struct AnimatedSymbol: View {
                     LinearGradient(colors: [Theme.gold, Theme.cream], startPoint: .top, endPoint: .bottom)
                 )
                 .modifier(SymbolEffectModifier(effect: effect, isActive: isActive))
-                .shadow(color: Theme.wineDark.opacity(0.6), radius: 12, y: 8)
+                .shadow(color: Theme.wineDeepest.opacity(0.6), radius: 12, y: 8)
         }
         .scaleEffect(isActive ? 1 : 0.85)
         .animation(.spring(response: 0.6, dampingFraction: 0.7), value: isActive)
@@ -253,7 +253,7 @@ private struct WineGlassFill: View {
                 WaveShape(progress: fill, phase: phase, amplitude: 5)
                     .fill(
                         LinearGradient(
-                            colors: [Theme.wine, Theme.wineDark],
+                            colors: [Theme.wineDeep, Theme.wineDeepest],
                             startPoint: .top, endPoint: .bottom
                         )
                     )
@@ -314,8 +314,8 @@ private struct AnimatedWineBackground: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             ZStack {
-                Theme.wineDark
-                blob(color: Theme.wine, t: t, speed: 0.18, radius: 360, base: CGPoint(x: 0.3, y: 0.25))
+                Theme.wineDeepest
+                blob(color: Theme.wineDeep, t: t, speed: 0.18, radius: 360, base: CGPoint(x: 0.3, y: 0.25))
                 blob(color: Color(red: 0.32, green: 0.04, blue: 0.10), t: t, speed: 0.13, radius: 420, base: CGPoint(x: 0.75, y: 0.7))
                 blob(color: Theme.gold.opacity(0.18), t: t, speed: 0.22, radius: 260, base: CGPoint(x: 0.6, y: 0.2))
             }

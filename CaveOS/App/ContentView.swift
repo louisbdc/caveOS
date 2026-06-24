@@ -54,6 +54,9 @@ struct ContentView: View {
     @AppStorage("caveos.hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
 
+    /// Mode d'apparence choisi par l'utilisateur (suivre le système par défaut).
+    @AppStorage(AppearanceMode.storageKey) private var appearanceMode = AppearanceMode.system
+
     var body: some View {
         Group {
             if horizontalSizeClass == .regular {
@@ -63,6 +66,7 @@ struct ContentView: View {
             }
         }
         .tint(Theme.wine)
+        .preferredColorScheme(appearanceMode.colorScheme)
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingView {
                 hasCompletedOnboarding = true
