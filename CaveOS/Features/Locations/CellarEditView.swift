@@ -16,6 +16,7 @@ struct CellarEditView: View {
     @State private var rows: Int
     @State private var columns: Int
     @State private var levels: Int
+    @State private var hasBackPositions: Bool
 
     init(cellar: Cellar? = nil) {
         self.cellar = cellar
@@ -26,6 +27,8 @@ struct CellarEditView: View {
         _rows = State(initialValue: cellar?.rows ?? 6)
         _columns = State(initialValue: cellar?.columns ?? 6)
         _levels = State(initialValue: cellar?.levels ?? 1)
+        // Active par défaut si la cave existante possède déjà des positions arrière.
+        _hasBackPositions = State(initialValue: cellar?.locations.contains { !$0.isFront } ?? false)
     }
 
     private var isEditing: Bool { cellar != nil }
@@ -53,10 +56,12 @@ struct CellarEditView: View {
                     Stepper("Lignes : \(rows)", value: $rows, in: 1...500)
                     Stepper("Colonnes : \(columns)", value: $columns, in: 1...500)
                     Stepper("Niveaux : \(levels)", value: $levels, in: 1...500)
+                    Toggle("Positions avant / arrière", isOn: $hasBackPositions)
                 } header: {
                     Text("Configuration")
                 } footer: {
-                    Text("\(levels * columns) emplacement(s) seront générés, chacun d'une capacité de \(rows) bouteille(s).")
+                    let perCell = hasBackPositions ? 2 : 1
+                    Text("\(levels * columns * perCell) emplacement(s) seront générés\(hasBackPositions ? " (avant et arrière)" : ""), chacun d'une capacité de \(rows) bouteille(s).")
                 }
             }
             .navigationTitle(isEditing ? "Modifier la cave" : "Nouvelle cave")
@@ -100,18 +105,23 @@ struct CellarEditView: View {
             newCellar.model = trimmedModel.isEmpty ? nil : trimmedModel
             context.insert(newCellar)
 
+            // Positions générées : avant uniquement, ou avant + arrière selon l'option.
+            let fronts = hasBackPositions ? [true, false] : [true]
             for level in 0..<levels {
                 for column in 0..<columns {
-                    let location = Location(
-                        kind: .shelf,
-                        label: "N\(level + 1)·C\(column + 1)",
-                        levelIndex: level,
-                        column: column,
-                        isFront: true,
-                        capacity: rows,
-                        cellar: newCellar
-                    )
-                    context.insert(location)
+                    for isFront in fronts {
+                        let suffix = hasBackPositions ? (isFront ? " Av" : " Ar") : ""
+                        let location = Location(
+                            kind: .shelf,
+                            label: "N\(level + 1)·C\(column + 1)\(suffix)",
+                            levelIndex: level,
+                            column: column,
+                            isFront: isFront,
+                            capacity: rows,
+                            cellar: newCellar
+                        )
+                        context.insert(location)
+                    }
                 }
             }
         }

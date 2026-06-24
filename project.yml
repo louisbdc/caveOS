@@ -42,11 +42,6 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSAppTransportSecurity:
-          NSExceptionDomains:
-            "152.228.136.49":
-              NSExceptionAllowsInsecureHTTPLoads: true
-              NSIncludesSubdomains: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.louisbdc.caveos

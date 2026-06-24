@@ -39,7 +39,7 @@ enum EnrichmentError: LocalizedError {
 enum EnrichmentService {
 
     /// Adresse de base du serveur d'enrichissement.
-    static let baseURL = URL(string: "http://152.228.136.49:8080")!
+    static let baseURL = URL(string: "https://caveos.152.228.136.49.sslip.io")!
 
     /// Clé `UserDefaults` mémorisant l'activation par l'utilisateur.
     private static let enabledKey = "caveos.enrichmentEnabled"

@@ -17,6 +17,7 @@ struct SearchView: View {
 
     @State private var filter = WineFilter()
     @State private var sort: SortOption = .dateAdded
+    @State private var secondarySort: SortOption?
     @State private var sortAscending = false
 
     private let now = Date()
@@ -49,11 +50,18 @@ struct SearchView: View {
     // MARK: - Filtrage + tri (en mémoire)
 
     private var results: [Bottle] {
-        let comparator = sort.comparator
         return bottles
             .filter { filter.matches($0, now: now) }
             .sorted { lhs, rhs in
-                sortAscending ? comparator(rhs, lhs) : comparator(lhs, rhs)
+                // Critère principal (avec sens), puis critère secondaire en départage.
+                var primary = sort.order(lhs, rhs)
+                if !sortAscending { primary = primary.inverted }
+                if primary != .orderedSame { return primary == .orderedAscending }
+                if let secondarySort, secondarySort != sort {
+                    let secondary = secondarySort.order(lhs, rhs)
+                    if secondary != .orderedSame { return secondary == .orderedAscending }
+                }
+                return false
             }
     }
 
@@ -309,6 +317,13 @@ struct SearchView: View {
                     Label("Ascendant", systemImage: "arrow.up").tag(true)
                     Label("Descendant", systemImage: "arrow.down").tag(false)
                 }
+                Divider()
+                Picker("Puis par", selection: $secondarySort) {
+                    Text("Aucun").tag(SortOption?.none)
+                    ForEach(SortOption.allCases) { option in
+                        Text(option.label).tag(SortOption?.some(option))
+                    }
+                }
             } label: {
                 Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
             }
@@ -470,6 +485,16 @@ private struct FilterChip: View {
 
 // MARK: - Options de tri
 
+private extension ComparisonResult {
+    var inverted: ComparisonResult {
+        switch self {
+        case .orderedAscending: return .orderedDescending
+        case .orderedDescending: return .orderedAscending
+        case .orderedSame: return .orderedSame
+        }
+    }
+}
+
 private enum SortOption: String, CaseIterable, Identifiable {
     case name, vintage, price, dateAdded
     var id: String { rawValue }
@@ -483,17 +508,22 @@ private enum SortOption: String, CaseIterable, Identifiable {
         }
     }
 
-    var comparator: (Bottle, Bottle) -> Bool {
+    /// Ordre naturel ascendant, composable (permet le tri multi-critères).
+    func order(_ a: Bottle, _ b: Bottle) -> ComparisonResult {
         switch self {
         case .name:
-            return { ($0.wine?.name ?? "") .localizedCaseInsensitiveCompare($1.wine?.name ?? "") == .orderedAscending }
+            return (a.wine?.name ?? "").localizedCaseInsensitiveCompare(b.wine?.name ?? "")
         case .vintage:
-            return { ($0.vintage ?? 0) > ($1.vintage ?? 0) }
+            return compare(a.vintage ?? 0, b.vintage ?? 0)
         case .price:
-            return { ($0.purchasePrice ?? 0) > ($1.purchasePrice ?? 0) }
+            return compare(a.purchasePrice ?? 0, b.purchasePrice ?? 0)
         case .dateAdded:
-            return { $0.createdAt > $1.createdAt }
+            return compare(a.createdAt, b.createdAt)
         }
+    }
+
+    private func compare<T: Comparable>(_ a: T, _ b: T) -> ComparisonResult {
+        a < b ? .orderedAscending : (a > b ? .orderedDescending : .orderedSame)
     }
 }
 
