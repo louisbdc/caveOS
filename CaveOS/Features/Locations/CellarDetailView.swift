@@ -12,6 +12,7 @@ struct CellarDetailView: View {
 
     @State private var isGrid = true
     @State private var showingEditor = false
+    @State private var dropError: String?
 
     init(cellar: Cellar) {
         self.cellar = cellar
@@ -40,6 +41,11 @@ struct CellarDetailView: View {
         }
         .navigationTitle(cellar.name)
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Emplacement plein", isPresented: .constant(dropError != nil)) {
+            Button("OK") { dropError = nil }
+        } message: {
+            Text(dropError ?? "")
+        }
         .toolbar {
             if cellar.locations.count > 1 {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -132,14 +138,32 @@ struct CellarDetailView: View {
         )
         guard let bottle = try? context.fetch(descriptor).first else { return false }
 
+        guard hasRoom(at: target, for: bottle) else {
+            dropError = "L'emplacement « \(target?.label ?? "") » est plein (capacité \(target?.capacity ?? 0))."
+            return false
+        }
+
         bottle.location = target
         bottle.updatedAt = Date()
         try? context.save()
         return true
     }
 
+    /// Vérifie qu'un emplacement peut accueillir la bouteille sans dépasser sa capacité.
+    /// Le vrac (`nil`) n'a pas de limite.
+    private func hasRoom(at target: Location?, for bottle: Bottle) -> Bool {
+        guard let target else { return true }
+        if bottle.location?.id == target.id { return true }
+        let current = target.bottles.reduce(0) { $0 + $1.quantity }
+        return current + bottle.quantity <= target.capacity
+    }
+
     /// Déplace une bouteille précise vers un emplacement (ou le vrac si nil).
     private func move(_ bottle: Bottle, to target: Location?) {
+        guard hasRoom(at: target, for: bottle) else {
+            dropError = "L'emplacement « \(target?.label ?? "") » est plein (capacité \(target?.capacity ?? 0))."
+            return
+        }
         bottle.location = target
         bottle.updatedAt = Date()
         try? context.save()

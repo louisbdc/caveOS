@@ -10,10 +10,13 @@ struct BottleEditView: View {
     @Query(sort: \Region.name) private var regions: [Region]
     @Query(sort: \Appellation.name) private var appellations: [Appellation]
     @Query(sort: \Grape.name) private var grapes: [Grape]
+    @Query(sort: \Producer.name) private var producers: [Producer]
     @Query(sort: \Cellar.createdAt, order: .reverse) private var cellars: [Cellar]
 
     /// Bouteille existante (édition) ou nil (création).
     private let existingBottle: Bottle?
+    /// Étiquette scannée à l'origine (pour relier appellation/cépages aux référentiels).
+    private let prefill: ScannedLabel?
 
     // MARK: - Champs « vin »
     @State private var wineName: String
@@ -53,6 +56,7 @@ struct BottleEditView: View {
 
     init(bottle: Bottle? = nil, prefill: ScannedLabel? = nil) {
         self.existingBottle = bottle
+        self.prefill = prefill
 
         let wine = bottle?.wine
         _wineName = State(initialValue: wine?.name ?? prefill?.wineName ?? "")
@@ -111,6 +115,7 @@ struct BottleEditView: View {
             }
             .navigationTitle(existingBottle == nil ? "Nouvelle bouteille" : "Modifier")
             .navigationBarTitleDisplayMode(.inline)
+            .task { matchScannedReferences() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") { dismiss() }
@@ -331,9 +336,59 @@ struct BottleEditView: View {
         return Double(normalized)
     }
 
+    /// Relie l'appellation et les cépages détectés par OCR aux référentiels existants
+    /// (par nom, insensible à la casse/accents). N'agit qu'en création depuis un scan.
+    private func matchScannedReferences() {
+        guard existingBottle == nil, let prefill else { return }
+
+        if selectedAppellationID == nil, let name = prefill.appellation, !name.isEmpty {
+            if let match = appellations.first(where: { $0.name.foldedForMatch == name.foldedForMatch }) {
+                selectedAppellationID = match.id
+                if selectedRegionID == nil, let regionName = match.regionName,
+                   let region = regions.first(where: { $0.name.foldedForMatch == regionName.foldedForMatch }) {
+                    selectedRegionID = region.id
+                }
+            }
+        }
+
+        if selectedGrapeIDs.isEmpty, !prefill.grapes.isEmpty {
+            let matched = grapes.filter { grape in
+                prefill.grapes.contains { $0.foldedForMatch == grape.name.foldedForMatch }
+            }
+            if !matched.isEmpty {
+                selectedGrapeIDs = Set(matched.map(\.id))
+            }
+        }
+    }
+
+    /// Indique si au moins un champ « vin » diffère du vin existant (déclenche le clonage
+    /// quand le vin est partagé par plusieurs bouteilles).
+    private func wineFieldsChanged(
+        from wine: Wine?, name: String, region: Region?,
+        appellation: Appellation?, grapes: [Grape], producerName: String
+    ) -> Bool {
+        guard let wine else { return true }
+        if wine.name.foldedForMatch != name.foldedForMatch { return true }
+        if wine.color != color { return true }
+        if wine.type != type { return true }
+        if wine.region?.id != region?.id { return true }
+        if wine.appellation?.id != appellation?.id { return true }
+        if Set(wine.grapes.map(\.id)) != Set(grapes.map(\.id)) { return true }
+        let currentProducer = wine.producer?.name.foldedForMatch ?? ""
+        if currentProducer != producerName.foldedForMatch { return true }
+        if wine.isFavorite != isFavorite { return true }
+        if wine.lowStockThreshold != parsedOptionalInt(lowStockThresholdText) { return true }
+        return false
+    }
+
+    /// Recherche un producteur existant par nom (insensible à la casse/accents)
+    /// avant d'en créer un nouveau, pour éviter les doublons.
     private func resolveProducer(named name: String) -> Producer? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+        if let existing = producers.first(where: { $0.name.foldedForMatch == trimmed.foldedForMatch }) {
+            return existing
+        }
         let producer = Producer(name: trimmed)
         context.insert(producer)
         return producer
@@ -346,9 +401,23 @@ struct BottleEditView: View {
         let selectedGrapes = grapes.filter { selectedGrapeIDs.contains($0.id) }
         let region = regions.first { $0.id == selectedRegionID }
         let appellation = appellations.first { $0.id == selectedAppellationID }
+        let trimmedProducerName = self.producerName.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let wine = existingBottle?.wine ?? Wine()
-        if existingBottle?.wine == nil {
+        // Si le vin est partagé par plusieurs bouteilles et que des champs « vin »
+        // ont changé, on le clone pour ne pas modifier les autres bouteilles.
+        let existingWine = existingBottle?.wine
+        let wineIsShared = (existingWine?.bottles.count ?? 0) > 1
+        let mustFork = wineIsShared && wineFieldsChanged(
+            from: existingWine,
+            name: trimmedName, region: region, appellation: appellation,
+            grapes: selectedGrapes, producerName: trimmedProducerName
+        )
+
+        let wine: Wine
+        if let existingWine, !mustFork {
+            wine = existingWine
+        } else {
+            wine = Wine()
             context.insert(wine)
         }
         wine.name = trimmedName
@@ -360,11 +429,10 @@ struct BottleEditView: View {
         wine.isFavorite = isFavorite
         wine.lowStockThreshold = parsedOptionalInt(lowStockThresholdText)
 
-        let producerName = self.producerName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if producerName.isEmpty {
+        if trimmedProducerName.isEmpty {
             wine.producer = nil
-        } else if wine.producer?.name != producerName {
-            wine.producer = resolveProducer(named: producerName)
+        } else if wine.producer?.name.foldedForMatch != trimmedProducerName.foldedForMatch {
+            wine.producer = resolveProducer(named: trimmedProducerName)
         }
 
         let bottle = existingBottle ?? Bottle()
