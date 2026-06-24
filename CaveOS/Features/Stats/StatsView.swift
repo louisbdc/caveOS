@@ -322,19 +322,19 @@ struct StatsView: View {
     }
 
     /// Bouteilles en pleine apogée ou à consommer rapidement.
+    ///
+    /// On calcule statut et fenêtre une seule fois par bouteille (au lieu de
+    /// recalculer la fenêtre à chaque comparaison du tri).
     private var priorityBottles: [Bottle] {
         activeBottles
-            .filter {
-                let status = ApogeeEngine.status(for: $0)
-                return status == .drinkSoon || status == .peak
+            .compactMap { bottle -> (bottle: Bottle, drinkBy: Int)? in
+                let status = ApogeeEngine.status(for: bottle)
+                guard status == .drinkSoon || status == .peak else { return nil }
+                return (bottle, ApogeeEngine.window(for: bottle)?.drinkBy ?? .max)
             }
-            .sorted { lhs, rhs in
-                let lhsWindow = ApogeeEngine.window(for: lhs)?.drinkBy ?? .max
-                let rhsWindow = ApogeeEngine.window(for: rhs)?.drinkBy ?? .max
-                return lhsWindow < rhsWindow
-            }
+            .sorted { $0.drinkBy < $1.drinkBy }
             .prefix(8)
-            .map { $0 }
+            .map(\.bottle)
     }
 }
 

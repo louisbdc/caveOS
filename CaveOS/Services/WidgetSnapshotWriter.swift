@@ -23,10 +23,13 @@ enum WidgetSnapshotWriter {
     static func update(modelContext: ModelContext) {
         let now = Date()
 
-        let bottles = (try? modelContext.fetch(FetchDescriptor<Bottle>())) ?? []
-
-        // On ne considère que les bouteilles encore en cave.
-        let inCellar = bottles.filter { $0.state == .inCellar }
+        // On ne charge que les bouteilles encore en cave (filtrage côté base via le
+        // champ stocké `stateRaw`), au lieu de tout récupérer puis filtrer en mémoire.
+        let inCellarRaw = BottleState.inCellar.rawValue
+        let descriptor = FetchDescriptor<Bottle>(
+            predicate: #Predicate { $0.stateRaw == inCellarRaw }
+        )
+        let inCellar = (try? modelContext.fetch(descriptor)) ?? []
 
         let totalBottles = inCellar.reduce(0) { $0 + max($1.quantity, 0) }
 
