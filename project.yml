@@ -22,18 +22,37 @@ targets:
     platform: iOS
     sources:
       - CaveOS
+      - Shared
+    dependencies:
+      - target: CaveOSWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.louisbdc.caveos
         GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_ENTITLEMENTS: CaveOS/CaveOS.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: CaveOS
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_NSCameraUsageDescription: "CaveOS utilise la caméra pour scanner les étiquettes de vos bouteilles et pré-remplir la fiche automatiquement, hors-ligne."
+        INFOPLIST_KEY_NSCameraUsageDescription: "CaveOS utilise la caméra pour scanner les étiquettes et codes-barres de vos bouteilles et pré-remplir la fiche, hors-ligne."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "CaveOS peut analyser une photo d'étiquette importée depuis votre photothèque."
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: YES
+
+  CaveOSWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - CaveOSWidget
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.louisbdc.caveos.widget
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: CaveOSWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CaveOSWidget/CaveOSWidget.entitlements
+        SKIP_INSTALL: NO
 
   CaveOSTests:
     type: bundle.unit-test
@@ -52,6 +71,7 @@ schemes:
     build:
       targets:
         CaveOS: all
+        CaveOSWidget: all
         CaveOSTests: [test]
     test:
       targets:

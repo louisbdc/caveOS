@@ -107,6 +107,7 @@ func main() {
 	mux.HandleFunc("GET /v1/regions", srv.handleRegions)
 	mux.HandleFunc("GET /v1/appellations", srv.handleAppellations)
 	mux.HandleFunc("GET /v1/enrich", srv.handleEnrich)
+	mux.HandleFunc("GET /v1/barcode", srv.handleBarcode)
 	mux.HandleFunc("GET /v1/db/latest", srv.handleDBLatest)
 	mux.HandleFunc("GET /credits", srv.handleCredits)
 
@@ -434,6 +435,29 @@ func (s *server) handleEnrich(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// BarcodeResult is the payload for /v1/barcode. Lacking an openly-licensed
+// EAN->wine database, this endpoint honestly reports that no lookup is
+// available and recommends manual entry.
+type BarcodeResult struct {
+	EAN     string `json:"ean"`
+	Found   bool   `json:"found"`
+	Message string `json:"message"`
+}
+
+func (s *server) handleBarcode(w http.ResponseWriter, r *http.Request) {
+	ean := strings.TrimSpace(r.URL.Query().Get("ean"))
+	if ean == "" {
+		writeError(w, http.StatusBadRequest, "missing query parameter 'ean'")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, BarcodeResult{
+		EAN:     ean,
+		Found:   false,
+		Message: "Lookup EAN non disponible (aucune base ouverte). Saisie manuelle recommandée.",
+	})
 }
 
 func (s *server) handleDBLatest(w http.ResponseWriter, r *http.Request) {

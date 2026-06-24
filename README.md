@@ -47,6 +47,16 @@ open CaveOS.xcodeproj       # puis Run sur un simulateur iOS 17+
 
 Voir [`server/README.md`](server/README.md). Service Go (binaire statique, SQLite pur-Go), endpoints `/v1/wines/search`, `/v1/enrich`, `/v1/db/latest`, `/credits`.
 
+## Fonctionnalités (CDC couvert)
+
+**v1 (MVP)** — inventaire CRUD, emplacements multi-niveaux + drag & drop, recherche/filtres, moteur d'apogée, notifications locales, scan d'étiquette Vision (OCR + parsing), export CSV, base vin embarquée, StoreKit 2 (freemium + Lifetime).
+
+**v2** — sync CloudKit (activable) + statut de synchronisation, analytics de cave (Swift Charts), code-barres EAN, enrichissement API opt-in (serveur Go), codes erreur matériel HH/LL/EE + relevés de température & alertes.
+
+**v3** — partage de cave (CloudKit/CKShare + repli texte), carnet de dégustation WSET avancé + photos, accords mets-vins, iPad adaptatif (NavigationSplitView), widget WidgetKit (App Group), matching visuel on-device (Vision feature print).
+
+> Scan caméra, code-barres, achats StoreKit et sync CloudKit se vérifient sur **appareil réel** (le simulateur ne les expose pas) ; le code gère les fallbacks. La sync iCloud et le partage social nécessitent un compte iCloud et un profil de provisioning avec les entitlements fournis.
+
 ## Licences des données
 
 | Source | Données | Licence |

@@ -12,6 +12,9 @@ struct CaveOSApp: App {
     /// Gestionnaire d'abonnements / achats (StoreKit), observable et partagé.
     @State private var store = StoreManager()
 
+    /// Phase de la scène, utilisée pour rafraîchir le snapshot du widget en arrière-plan.
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -19,8 +22,20 @@ struct CaveOSApp: App {
                 .task {
                     store.startObserving()
                     await store.loadProducts()
+                    refreshWidgetSnapshot()
                 }
         }
         .modelContainer(container)
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                refreshWidgetSnapshot()
+            }
+        }
+    }
+
+    /// Recalcule et écrit le snapshot partagé avec le widget.
+    @MainActor
+    private func refreshWidgetSnapshot() {
+        WidgetSnapshotWriter.update(modelContext: container.mainContext)
     }
 }

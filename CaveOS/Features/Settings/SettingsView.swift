@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var notificationsEnabled = false
     @State private var isRequestingAuthorization = false
     @State private var showPaywall = false
+    @AppStorage(AppContainer.iCloudSyncKey) private var iCloudSyncEnabled = false
 
     private let notificationService = NotificationService()
 
@@ -32,6 +33,10 @@ struct SettingsView: View {
                 accountSection
                 exportSection
                 notificationsSection
+                iCloudSyncSection
+                enrichmentSection
+                hardwareSection
+                toolsSection
                 dataSection
                 aboutSection
             }
@@ -99,6 +104,70 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Synchronisation iCloud
+
+    @ViewBuilder
+    private var iCloudSyncSection: some View {
+        Section {
+            Toggle(isOn: $iCloudSyncEnabled) {
+                Label("Synchronisation iCloud", systemImage: "icloud")
+            }
+            NavigationLink {
+                SyncStatusView()
+            } label: {
+                Label("État de la synchronisation", systemImage: "arrow.triangle.2.circlepath")
+            }
+        } header: {
+            Text("Synchronisation iCloud")
+        } footer: {
+            Text("Synchronisez votre cave entre vos appareils. Un redémarrage de l'application est nécessaire pour appliquer le changement.")
+        }
+    }
+
+    // MARK: - Données & enrichissement
+
+    @ViewBuilder
+    private var enrichmentSection: some View {
+        Section("Données & enrichissement") {
+            NavigationLink {
+                EnrichmentView()
+            } label: {
+                Label("Enrichir les vins", systemImage: "sparkles")
+            }
+        }
+    }
+
+    // MARK: - Matériel
+
+    @ViewBuilder
+    private var hardwareSection: some View {
+        Section("Matériel") {
+            NavigationLink {
+                HardwareCodesView()
+            } label: {
+                Label("Codes matériel", systemImage: "barcode.viewfinder")
+            }
+        }
+    }
+
+    // MARK: - Outils
+
+    @ViewBuilder
+    private var toolsSection: some View {
+        Section("Outils") {
+            NavigationLink {
+                VisualMatchView()
+            } label: {
+                Label("Matching visuel", systemImage: "camera.viewfinder")
+            }
+            NavigationLink {
+                ShareCellarListView()
+            } label: {
+                Label("Partager une cave", systemImage: "square.and.arrow.up.on.square")
+            }
+        }
+    }
+
     // MARK: - Données
 
     @ViewBuilder
@@ -144,5 +213,33 @@ struct CSVFile: Transferable {
             Data(file.content.utf8)
         }
         .suggestedFileName("inventaire-caveos.csv")
+    }
+}
+
+// MARK: - Partage de cave
+
+/// Liste des caves, chacune menant à l'écran de partage correspondant.
+struct ShareCellarListView: View {
+    @Query(sort: \Cellar.createdAt, order: .reverse) private var cellars: [Cellar]
+
+    var body: some View {
+        List {
+            if cellars.isEmpty {
+                ContentUnavailableView(
+                    "Aucune cave",
+                    systemImage: "tray",
+                    description: Text("Créez une cave pour pouvoir la partager.")
+                )
+            } else {
+                ForEach(cellars) { cellar in
+                    NavigationLink {
+                        ShareCellarView(cellar: cellar)
+                    } label: {
+                        Label(cellar.name, systemImage: cellar.type.symbol)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Partager une cave")
     }
 }

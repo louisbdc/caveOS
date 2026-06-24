@@ -83,6 +83,7 @@ final class Wine {
     var colorRaw: String = WineColor.red.rawValue
     var typeRaw: String = WineType.still.rawValue
     var lwin: String?
+    var barcode: String?   // code-barres EAN (v2)
 
     var producer: Producer?
     var region: Region?
@@ -146,6 +147,8 @@ final class Bottle {
     var conservationRaw: String?
 
     var notes: String?
+    var ean: String?       // code-barres scanné (v2)
+    @Attribute(.externalStorage) var labelPhotoData: Data?  // photo d'étiquette (matching visuel v3)
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -196,6 +199,9 @@ final class Cellar {
 
     @Relationship(deleteRule: .cascade, inverse: \Location.cellar)
     var locations: [Location] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \TemperatureReading.cellar)
+    var temperatureReadings: [TemperatureReading] = []
 
     var type: CellarType {
         get { CellarType(rawValue: typeRaw) ?? .electric }
@@ -261,6 +267,13 @@ final class TastingNote {
     var palate: String?
     var text: String?
     var pairing: String?
+    // Grille WSET avancée (v3)
+    var sweetness: String?
+    var acidity: String?
+    var tannin: String?
+    var body: String?
+    var finish: String?
+    @Attribute(.externalStorage) var photoData: Data?
 
     init(id: UUID = UUID(), bottle: Bottle? = nil, wine: Wine? = nil,
          date: Date = Date(), score: Int? = nil) {
@@ -272,10 +285,30 @@ final class TastingNote {
     }
 }
 
+// MARK: - Relevé de température (v2 — codes erreur matériel HH/LL/EE & alertes)
+@Model
+final class TemperatureReading {
+    var id: UUID = UUID()
+    var cellar: Cellar?
+    var date: Date = Date()
+    var celsius: Double = 12.0
+    var note: String?
+
+    init(id: UUID = UUID(), cellar: Cellar? = nil, date: Date = Date(),
+         celsius: Double = 12.0, note: String? = nil) {
+        self.id = id
+        self.cellar = cellar
+        self.date = date
+        self.celsius = celsius
+        self.note = note
+    }
+}
+
 // MARK: - Liste de tous les types persistés (pour le ModelContainer)
 enum AppSchema {
     static let models: [any PersistentModel.Type] = [
         Wine.self, Bottle.self, Producer.self, Region.self,
-        Appellation.self, Grape.self, Location.self, Cellar.self, TastingNote.self
+        Appellation.self, Grape.self, Location.self, Cellar.self, TastingNote.self,
+        TemperatureReading.self
     ]
 }
