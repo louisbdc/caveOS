@@ -4,7 +4,6 @@ import SwiftUI
 private enum RootDestination: String, CaseIterable, Identifiable {
     case inventory
     case cellars
-    case search
     case stats
     case pairing
     case settings
@@ -15,7 +14,6 @@ private enum RootDestination: String, CaseIterable, Identifiable {
         switch self {
         case .inventory: return "Cave"
         case .cellars: return "Caves"
-        case .search: return "Recherche"
         case .stats: return "Stats"
         case .pairing: return "Accords"
         case .settings: return "Réglages"
@@ -26,7 +24,6 @@ private enum RootDestination: String, CaseIterable, Identifiable {
         switch self {
         case .inventory: return "wineglass"
         case .cellars: return "square.grid.3x3"
-        case .search: return "magnifyingglass"
         case .stats: return "chart.pie"
         case .pairing: return "fork.knife"
         case .settings: return "gearshape"
@@ -38,7 +35,6 @@ private enum RootDestination: String, CaseIterable, Identifiable {
         switch self {
         case .inventory: InventoryView()
         case .cellars: CellarsView()
-        case .search: SearchView()
         case .stats: StatsView()
         case .pairing: PairingView()
         case .settings: SettingsView()
