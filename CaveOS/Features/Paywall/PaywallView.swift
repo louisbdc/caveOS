@@ -127,6 +127,10 @@ struct PaywallView: View {
                     .font(.headline)
                     .foregroundStyle(Theme.wine)
             }
+            Text("L'achat à vie devient plus avantageux si vous gardez l'app plus de 2 ans.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity)

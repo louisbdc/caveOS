@@ -13,11 +13,13 @@ struct StatsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if bottles.isEmpty {
+                if activeBottles.isEmpty {
                     ContentUnavailableView(
-                        "Cave vide",
+                        "Aucune bouteille en cave",
                         systemImage: "chart.pie",
-                        description: Text("Ajoutez des bouteilles pour découvrir vos statistiques.")
+                        description: Text(bottles.isEmpty
+                            ? "Ajoutez des bouteilles pour découvrir vos statistiques."
+                            : "Vous avez consommé toutes vos bouteilles. Ajoutez-en pour suivre votre cave.")
                     )
                 } else {
                     content
@@ -50,7 +52,7 @@ struct StatsView: View {
             Text("Vue d'ensemble")
                 .font(.headline)
             HStack(spacing: Theme.Spacing.m) {
-                metric(value: "\(distinctBottleCount)", label: "Références")
+                metric(value: "\(distinctBottleCount)", label: "Entrées")
                 metric(value: "\(totalQuantity)", label: "Bouteilles")
                 metric(value: formattedValue, label: "Valeur estimée")
             }
@@ -118,7 +120,7 @@ struct StatsView: View {
 
     private var regionCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            Text("Top régions")
+            Text(distinctRegionCount > 6 ? "Top régions (6 principales sur \(distinctRegionCount))" : "Régions")
                 .font(.headline)
             if regionBreakdown.isEmpty {
                 emptyChartHint
@@ -168,6 +170,11 @@ struct StatsView: View {
                 }
                 .frame(height: 220)
             }
+            if undatedQuantity > 0 {
+                Text("\(undatedQuantity) bouteille(s) sans millésime ne sont pas comptées ici.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
@@ -186,7 +193,12 @@ struct StatsView: View {
             } else {
                 VStack(spacing: Theme.Spacing.s) {
                     ForEach(priorityBottles, id: \.id) { bottle in
-                        priorityRow(bottle)
+                        NavigationLink {
+                            BottleDetailView(bottle: bottle)
+                        } label: {
+                            priorityRow(bottle)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -216,6 +228,9 @@ struct StatsView: View {
             }
             Spacer()
             StatusBadge(text: status.label, color: status.tint, systemImage: status.symbol)
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -265,13 +280,19 @@ struct StatsView: View {
             }
     }
 
-    private var regionBreakdown: [RegionStat] {
+    private var regionTotals: [String: Int] {
         var totals: [String: Int] = [:]
         for bottle in activeBottles {
             let name = bottle.wine?.region?.name ?? "Inconnue"
             totals[name, default: 0] += bottle.quantity
         }
         return totals
+    }
+
+    private var distinctRegionCount: Int { regionTotals.count }
+
+    private var regionBreakdown: [RegionStat] {
+        regionTotals
             .map { RegionStat(name: $0.key, quantity: $0.value) }
             .sorted { $0.quantity > $1.quantity }
             .prefix(6)
@@ -284,11 +305,19 @@ struct StatsView: View {
             let status = ApogeeEngine.status(for: bottle)
             totals[status, default: 0] += bottle.quantity
         }
-        let order: [ApogeeStatus] = [.tooYoung, .ready, .peak, .drinkSoon, .past, .unknown]
+        // On exclut « Inconnu » (vins sans millésime) pour ne pas fausser la lecture de la maturité.
+        let order: [ApogeeStatus] = [.tooYoung, .ready, .peak, .drinkSoon, .past]
         return order.compactMap { status in
             guard let quantity = totals[status], quantity > 0 else { return nil }
             return ApogeeStat(status: status, quantity: quantity)
         }
+    }
+
+    /// Quantité de bouteilles sans statut d'apogée déterminable (sans millésime).
+    private var undatedQuantity: Int {
+        activeBottles
+            .filter { ApogeeEngine.status(for: $0) == .unknown }
+            .reduce(0) { $0 + $1.quantity }
     }
 
     /// Bouteilles en pleine apogée ou à consommer rapidement.

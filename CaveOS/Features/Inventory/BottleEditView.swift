@@ -178,7 +178,7 @@ struct BottleEditView: View {
     }
 
     private var bottleSection: some View {
-        Section("Bouteille") {
+        Section {
             TextField("Millésime", text: $vintageText)
                 .keyboardType(.numberPad)
             Picker("Format", selection: $format) {
@@ -188,6 +188,10 @@ struct BottleEditView: View {
             Picker("Qualité de stockage", selection: $storageQuality) {
                 ForEach(StorageQuality.allCases) { Text($0.label).tag($0) }
             }
+        } header: {
+            Text("Bouteille")
+        } footer: {
+            Text("Laissez le millésime vide pour un vin sans millésime (NV). La qualité de stockage ajuste la fenêtre d'apogée calculée.")
         }
     }
 
@@ -237,16 +241,20 @@ struct BottleEditView: View {
         } header: {
             Text("Apogée (override manuel)")
         } footer: {
-            Text("Laissez vide pour utiliser le calcul automatique.")
+            Text("Années absolues (ex. 2018, 2024, 2032). Laissez vide pour utiliser le calcul automatique basé sur le cépage, la région et la qualité de stockage.")
         }
     }
 
     private var barcodeSection: some View {
-        Section("Code-barres") {
+        Section {
             TextField("EAN", text: $ean)
                 .keyboardType(.numbersAndPunctuation)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+        } header: {
+            Text("Code-barres")
+        } footer: {
+            Text("Optionnel. Le code-barres (EAN, 8 à 13 chiffres) permet de retrouver rapidement la bouteille lors d'un scan.")
         }
     }
 
@@ -289,7 +297,7 @@ struct BottleEditView: View {
     private var notesSection: some View {
         Section("Notes") {
             TextField("Notes", text: $notes, axis: .vertical)
-                .lineLimit(3...6)
+                .lineLimit(3...20)
         }
     }
 

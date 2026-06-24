@@ -41,12 +41,14 @@ struct CellarDetailView: View {
         .navigationTitle(cellar.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Picker("Affichage", selection: $isGrid) {
-                    Image(systemName: "square.grid.2x2").tag(true)
-                    Image(systemName: "list.bullet").tag(false)
+            if cellar.locations.count > 1 {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Picker("Affichage", selection: $isGrid) {
+                        Image(systemName: "square.grid.2x2").tag(true)
+                        Image(systemName: "list.bullet").tag(false)
+                    }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

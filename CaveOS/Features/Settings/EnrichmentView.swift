@@ -59,7 +59,7 @@ struct EnrichmentView: View {
         } header: {
             Text("Service distant")
         } footer: {
-            Text("Optionnel. Lorsqu'il est activé, CaveOS interroge un service distant pour compléter les fenêtres d'apogée. L'app reste pleinement fonctionnelle hors-ligne.")
+            Text("Optionnel. Une fois activé, recherchez un vin ci-dessous pour récupérer manuellement sa fenêtre d'apogée depuis la base distante. Rien n'est envoyé automatiquement ; l'app reste pleinement fonctionnelle hors-ligne.")
         }
     }
 

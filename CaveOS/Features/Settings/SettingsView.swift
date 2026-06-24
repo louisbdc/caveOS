@@ -133,7 +133,7 @@ struct SettingsView: View {
         } header: {
             Text("Export")
         } footer: {
-            Text("\(bottles.count) bouteille(s) seront exportées au format CSV ou Excel.")
+            Text("\(bottles.count) bouteille(s) seront exportées. Le fichier inclut une ligne d'en-tête (Vin, Domaine, Millésime…) pour le réimporter ailleurs.")
         }
     }
 
@@ -150,7 +150,7 @@ struct SettingsView: View {
         } header: {
             Text("Import")
         } footer: {
-            Text("Importez un inventaire au format CSV (exports CaveOS, Vinotag, CellarTracker…). Seul un nom de vin est requis par ligne.")
+            Text("Importez un inventaire au format CSV (exports CaveOS, Vinotag, CellarTracker…). Seules les lignes comportant un nom de vin sont importées ; les doublons ne sont pas détectés (un nouvel import ajoute les bouteilles).")
         }
         .fileImporter(
             isPresented: $showImporter,
@@ -204,7 +204,7 @@ struct SettingsView: View {
         } header: {
             Text("Synchronisation iCloud")
         } footer: {
-            Text("Synchronisez votre cave entre vos appareils. Un redémarrage de l'application est nécessaire pour appliquer le changement.")
+            Text("Synchronisez votre cave entre vos appareils via votre iCloud privé. Un redémarrage de l'application est nécessaire pour appliquer le changement ; consultez « État de la synchronisation » pour vérifier qu'elle est active.")
         }
     }
 
