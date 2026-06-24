@@ -37,15 +37,20 @@ enum BillingService {
     }
 
     /// Indique si l'abonnement est actif pour cet appareil.
-    static func status() async -> Bool {
-        guard let url = URL(string: "\(baseURL)/v1/billing/status?ref=\(deviceRef)") else { return false }
+    ///
+    /// Renvoie `nil` lorsque l'état est **indéterminé** (réseau indisponible,
+    /// serveur injoignable, réponse illisible) : on ne sait pas trancher. Les
+    /// appelants doivent alors **conserver** l'état connu plutôt que de révoquer
+    /// l'accès — sinon un abonné perdrait son Pro hors-ligne.
+    static func status() async -> Bool? {
+        guard let url = URL(string: "\(baseURL)/v1/billing/status?ref=\(deviceRef)") else { return nil }
         do {
             let (data, _) = try await Networking.retrying {
                 try await Networking.session.data(from: url)
             }
-            return (try? JSONDecoder().decode(StatusBody.self, from: data))?.active ?? false
+            return (try? JSONDecoder().decode(StatusBody.self, from: data))?.active
         } catch {
-            return false
+            return nil
         }
     }
 

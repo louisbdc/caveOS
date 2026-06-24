@@ -32,7 +32,11 @@ struct CaveOSApp: App {
                     store.startObserving()
                     await store.loadProducts()
                     // Synchronise l'abonnement web (Stripe) souscrit sur cet appareil.
-                    store.setWebSubscription(active: await BillingService.status())
+                    // On ne met à jour l'état que si le serveur répond clairement :
+                    // hors-ligne (nil), on conserve le dernier état connu.
+                    if let active = await BillingService.status() {
+                        store.setWebSubscription(active: active)
+                    }
                     refreshWidgetSnapshot()
                 }
         }

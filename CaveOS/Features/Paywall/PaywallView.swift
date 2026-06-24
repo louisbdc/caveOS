@@ -171,7 +171,9 @@ struct PaywallView: View {
                 Task {
                     isPurchasing = true
                     await store.restore()
-                    store.setWebSubscription(active: await BillingService.status())
+                    if let active = await BillingService.status() {
+                        store.setWebSubscription(active: active)
+                    }
                     isPurchasing = false
                     if store.isPro { await celebrateAndDismiss() }
                 }
@@ -211,7 +213,7 @@ struct PaywallView: View {
         isVerifying = true
         defer { isVerifying = false }
         for _ in 0..<6 {
-            if await BillingService.status() {
+            if await BillingService.status() == true {
                 store.setWebSubscription(active: true)
                 await celebrateAndDismiss()
                 return
