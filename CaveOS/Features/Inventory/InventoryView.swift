@@ -226,12 +226,43 @@ struct InventoryView: View {
     private func delete(at offsets: IndexSet) {
         let service = NotificationService()
         let toDelete = offsets.map { results[$0] }
+        let deletedIDs = Set(toDelete.map(\.id))
+        let affectedWines = Set(toDelete.compactMap(\.wine))
+
         for bottle in toDelete {
             service.cancelAll(for: bottle)
             context.delete(bottle)
         }
+
+        cleanupOrphans(after: affectedWines, deletedBottleIDs: deletedIDs)
+
         try? context.save()
         SnapshotCoordinator.refresh(modelContext: context)
+    }
+
+    /// Supprime les vins devenus sans bouteille (et leur producteur s'il n'est plus
+    /// utilisé), pour éviter l'accumulation d'entités orphelines créées par l'utilisateur.
+    /// Les données de référence embarquées (région, appellation, cépage) ne sont jamais touchées.
+    private func cleanupOrphans(after wines: Set<Wine>, deletedBottleIDs: Set<UUID>) {
+        for wine in wines {
+            let remaining = wine.bottles.filter { !deletedBottleIDs.contains($0.id) }
+            guard remaining.isEmpty else { continue }
+            let producer = wine.producer
+            context.delete(wine)
+            if let producer { deleteProducerIfUnused(producer, excludingWineID: wine.id) }
+        }
+    }
+
+    /// Supprime un producteur s'il n'est plus rattaché à aucun autre vin.
+    private func deleteProducerIfUnused(_ producer: Producer, excludingWineID: UUID) {
+        let producerID = producer.id
+        let descriptor = FetchDescriptor<Wine>(
+            predicate: #Predicate { $0.producer?.id == producerID }
+        )
+        let stillUsing = (try? context.fetch(descriptor))?.filter { $0.id != excludingWineID } ?? []
+        if stillUsing.isEmpty {
+            context.delete(producer)
+        }
     }
 
     /// Crée une bouteille pré-remplie depuis un scan puis ouvre l'éditeur dessus.
