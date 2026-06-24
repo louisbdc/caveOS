@@ -9,6 +9,7 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var isPurchasing = false
+    @State private var showingWebSubscription = false
 
     var body: some View {
         NavigationStack {
@@ -37,6 +38,9 @@ struct PaywallView: View {
                 if let error = store.purchaseError {
                     errorBanner(error)
                 }
+            }
+            .sheet(isPresented: $showingWebSubscription) {
+                SubscriptionView()
             }
         }
     }
@@ -152,6 +156,14 @@ struct PaywallView: View {
             }
             .buttonStyle(.bordered)
             .tint(Theme.wine)
+            .disabled(isPurchasing)
+
+            Button {
+                showingWebSubscription = true
+            } label: {
+                Label("S'abonner via le web (Stripe)", systemImage: "globe")
+                    .font(.subheadline)
+            }
             .disabled(isPurchasing)
 
             Button("Restaurer mes achats") {

@@ -7,7 +7,16 @@ import SwiftData
 struct CaveOSApp: App {
 
     /// Conteneur SwiftData partagé pour toute l'application.
+    ///
+    /// ⚠️ DÉMO TEMPORAIRE — en `DEBUG`, l'app démarre sur un conteneur **en mémoire**
+    /// peuplé par ``SampleData`` (réinitialisé à chaque lancement, jamais persisté ni
+    /// synchronisé CloudKit). Pour revenir à la base persistante, supprimer ce bloc
+    /// `#if DEBUG` et ne garder que `AppContainer.makeContainer()`.
+    #if DEBUG
+    private let container: ModelContainer = SampleData.makeContainer()
+    #else
     private let container: ModelContainer = AppContainer.makeContainer()
+    #endif
 
     /// Gestionnaire d'abonnements / achats (StoreKit), observable et partagé.
     @State private var store = StoreManager()
@@ -22,6 +31,8 @@ struct CaveOSApp: App {
                 .task {
                     store.startObserving()
                     await store.loadProducts()
+                    // Synchronise l'abonnement web (Stripe) souscrit sur cet appareil.
+                    store.setWebSubscription(active: await BillingService.status())
                     refreshWidgetSnapshot()
                 }
         }

@@ -12,6 +12,8 @@ ExecStart=/home/ubuntu/caveos-server/caveos-server
 Restart=always
 RestartSec=3
 Environment=PORT=8080
+# Secrets Stripe (clé, price id, webhook secret) — fichier chmod 600, hors git.
+EnvironmentFile=-/home/ubuntu/caveos-server/.env
 
 # Hardening
 NoNewPrivileges=true

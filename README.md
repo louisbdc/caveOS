@@ -57,6 +57,21 @@ Voir [`server/README.md`](server/README.md). Service Go (binaire statique, SQLit
 
 > Scan caméra, code-barres, achats StoreKit et sync CloudKit se vérifient sur **appareil réel** (le simulateur ne les expose pas) ; le code gère les fallbacks. La sync iCloud et le partage social nécessitent un compte iCloud et un profil de provisioning avec les entitlements fournis.
 
+## Abonnement Stripe (web)
+
+En complément des achats in-app StoreKit, CaveOS Pro peut être souscrit via **Stripe** (abonnement web). Le serveur Go gère Checkout (`mode: subscription`), le webhook signé et le Customer Portal ; l'app n'embarque **aucune clé** et interroge `/v1/billing/status` pour débloquer Pro.
+
+La clé Stripe et les secrets vivent **uniquement** sur le VPS dans `/home/ubuntu/caveos-server/.env` (`chmod 600`, hors git), chargés via `EnvironmentFile` systemd :
+
+```
+STRIPE_SECRET_KEY=sk_test_…      # jamais commité
+STRIPE_PRICE_ID=price_…
+STRIPE_WEBHOOK_SECRET=whsec_…
+PUBLIC_BASE_URL=https://caveos.152.228.136.49.sslip.io
+```
+
+Un hook `scripts/check-secrets.sh` (installé en `pre-commit`) bloque tout commit contenant une clé. Le serveur est exposé en HTTPS via Caddy + sslip.io. En production, préférer une **clé restreinte (`rk_`)** et régénérer toute clé ayant transité en clair.
+
 ## Licences des données
 
 | Source | Données | Licence |

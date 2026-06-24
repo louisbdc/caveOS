@@ -16,6 +16,7 @@ final class StoreManager {
     static let freeScanLimit = 25
 
     private static let freeScansKey = "caveos.freeScansRemaining"
+    private static let webSubKey = "caveos.webSubscriptionActive"
 
     // MARK: - État publié
 
@@ -37,6 +38,11 @@ final class StoreManager {
 
     /// Dernière erreur d'achat lisible par l'utilisateur (nil si aucune).
     var purchaseError: String?
+
+    /// Abonnement Pro souscrit via le web (Stripe), persisté localement.
+    var webSubscriptionActive: Bool = UserDefaults.standard.bool(forKey: StoreManager.webSubKey) {
+        didSet { UserDefaults.standard.set(webSubscriptionActive, forKey: Self.webSubKey) }
+    }
 
     // MARK: - Privé
 
@@ -86,7 +92,13 @@ final class StoreManager {
                 }
             }
         }
-        isPro = entitled
+        isPro = entitled || webSubscriptionActive
+    }
+
+    /// Applique le droit Pro issu d'un abonnement web (Stripe).
+    func setWebSubscription(active: Bool) {
+        webSubscriptionActive = active
+        Task { await updateProEntitlement() }
     }
 
     // MARK: - Chargement des produits
