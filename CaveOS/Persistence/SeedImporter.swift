@@ -29,6 +29,8 @@ enum SeedImporter {
     private struct SeedAppellation: Codable {
         let name: String
         let regionName: String?
+        let allowedGrapes: [String]?
+        let lwin: String?
     }
 
     // MARK: - Amorçage
@@ -69,6 +71,7 @@ enum SeedImporter {
                 regionName: appellation.regionName,
                 inaoCode: nil
             )
+            model.allowedGrapeNames = appellation.allowedGrapes ?? []
             repository.insert(model)
         }
 

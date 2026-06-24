@@ -19,13 +19,16 @@ struct DataScannerRepresentable: UIViewControllerRepresentable {
     /// Callback appelé avec l'ensemble des lignes de texte actuellement détectées.
     var onRecognizedText: ([String]) -> Void
 
+    /// Callback appelé avec la charge utile d'un code-barres détecté.
+    var onRecognizedBarcode: ((String) -> Void)? = nil
+
     func makeCoordinator() -> Coordinator {
-        Coordinator(onRecognizedText: onRecognizedText)
+        Coordinator(onRecognizedText: onRecognizedText, onRecognizedBarcode: onRecognizedBarcode)
     }
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
         let scanner = DataScannerViewController(
-            recognizedDataTypes: [.text()],
+            recognizedDataTypes: [.text(), .barcode()],
             qualityLevel: .accurate,
             recognizesMultipleItems: true,
             isHighFrameRateTrackingEnabled: false,
@@ -53,9 +56,14 @@ struct DataScannerRepresentable: UIViewControllerRepresentable {
     @MainActor
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         private let onRecognizedText: ([String]) -> Void
+        private let onRecognizedBarcode: ((String) -> Void)?
 
-        init(onRecognizedText: @escaping ([String]) -> Void) {
+        init(
+            onRecognizedText: @escaping ([String]) -> Void,
+            onRecognizedBarcode: ((String) -> Void)? = nil
+        ) {
             self.onRecognizedText = onRecognizedText
+            self.onRecognizedBarcode = onRecognizedBarcode
         }
 
         func dataScanner(
@@ -81,8 +89,18 @@ struct DataScannerRepresentable: UIViewControllerRepresentable {
                 }
                 return nil
             }
-            guard !lines.isEmpty else { return }
-            onRecognizedText(lines)
+            if !lines.isEmpty {
+                onRecognizedText(lines)
+            }
+
+            guard let onRecognizedBarcode else { return }
+            for item in items {
+                if case let .barcode(barcode) = item,
+                   let payload = barcode.payloadStringValue,
+                   !payload.isEmpty {
+                    onRecognizedBarcode(payload)
+                }
+            }
         }
     }
 }

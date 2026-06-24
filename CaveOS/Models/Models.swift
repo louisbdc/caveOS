@@ -54,12 +54,15 @@ final class Appellation {
     var name: String = ""
     var regionName: String?
     var inaoCode: String?
+    var allowedGrapeNames: [String] = []   // mapping AOC→cépages autorisés (CDC 6.4)
 
-    init(id: UUID = UUID(), name: String = "", regionName: String? = nil, inaoCode: String? = nil) {
+    init(id: UUID = UUID(), name: String = "", regionName: String? = nil, inaoCode: String? = nil,
+         allowedGrapeNames: [String] = []) {
         self.id = id
         self.name = name
         self.regionName = regionName
         self.inaoCode = inaoCode
+        self.allowedGrapeNames = allowedGrapeNames
     }
 }
 
@@ -94,6 +97,9 @@ final class Wine {
     var baseApogeeMin: Int?
     var baseApogeePeak: Int?
     var baseApogeeMax: Int?
+
+    var isFavorite: Bool = false          // vin favori (alerte stock bas, CDC 9)
+    var lowStockThreshold: Int?           // seuil d'alerte de stock bas
 
     @Relationship(deleteRule: .cascade, inverse: \Bottle.wine)
     var bottles: [Bottle] = []
@@ -147,6 +153,7 @@ final class Bottle {
     var conservationRaw: String?
 
     var notes: String?
+    var isLyingDown: Bool = true   // bouteille couchée (true) ou debout (false) — CDC 5.2
     var ean: String?       // code-barres scanné (v2)
     @Attribute(.externalStorage) var labelPhotoData: Data?  // photo d'étiquette (matching visuel v3)
     var createdAt: Date = Date()

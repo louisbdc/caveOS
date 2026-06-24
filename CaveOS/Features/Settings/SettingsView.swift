@@ -8,9 +8,13 @@ struct SettingsView: View {
     @Environment(StoreManager.self) private var store
     @Query(sort: \Bottle.createdAt, order: .reverse) private var bottles: [Bottle]
 
+    @Environment(\.modelContext) private var modelContext
+
     @State private var notificationsEnabled = false
     @State private var isRequestingAuthorization = false
     @State private var showPaywall = false
+    @State private var showImporter = false
+    @State private var importResult: ImportResult?
     @AppStorage(AppContainer.iCloudSyncKey) private var iCloudSyncEnabled = false
 
     private let notificationService = NotificationService()
@@ -27,11 +31,18 @@ struct SettingsView: View {
         CSVFile(content: CSVExporter.csv(from: bottles))
     }
 
+    /// URL d'un classeur Excel temporaire généré à partir de l'inventaire courant.
+    private var excelFileURL: URL? {
+        guard !bottles.isEmpty else { return nil }
+        return try? ExcelExporter.makeFile(from: bottles)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 accountSection
                 exportSection
+                importSection
                 notificationsSection
                 iCloudSyncSection
                 enrichmentSection
@@ -77,10 +88,51 @@ struct SettingsView: View {
                 Label("Exporter l'inventaire (CSV)", systemImage: "square.and.arrow.up")
             }
             .disabled(bottles.isEmpty)
+
+            if let excelURL = excelFileURL {
+                ShareLink(
+                    item: excelURL,
+                    preview: SharePreview("Inventaire CaveOS", image: Image(systemName: "tablecells"))
+                ) {
+                    Label("Exporter en Excel (.xls)", systemImage: "tablecells")
+                }
+                .disabled(bottles.isEmpty)
+            }
         } header: {
             Text("Export")
         } footer: {
-            Text("\(bottles.count) bouteille(s) seront exportées au format CSV.")
+            Text("\(bottles.count) bouteille(s) seront exportées au format CSV ou Excel.")
+        }
+    }
+
+    // MARK: - Import
+
+    @ViewBuilder
+    private var importSection: some View {
+        Section {
+            Button {
+                showImporter = true
+            } label: {
+                Label("Importer depuis un CSV", systemImage: "square.and.arrow.down")
+            }
+        } header: {
+            Text("Import")
+        } footer: {
+            Text("Importez un inventaire au format CSV (exports CaveOS, Vinotag, CellarTracker…). Seul un nom de vin est requis par ligne.")
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.commaSeparatedText, .text],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+        .alert(item: $importResult) { result in
+            Alert(
+                title: Text(result.isSuccess ? "Import terminé" : "Échec de l'import"),
+                message: Text(result.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -200,6 +252,40 @@ struct SettingsView: View {
             isRequestingAuthorization = false
         }
     }
+
+    /// Traite le résultat du sélecteur de fichier et lance l'import CSV.
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            do {
+                let count = try CSVImporter.importBottles(from: url, into: modelContext)
+                importResult = ImportResult(
+                    isSuccess: true,
+                    message: "\(count) bouteille(s) importée(s) avec succès."
+                )
+            } catch {
+                importResult = ImportResult(
+                    isSuccess: false,
+                    message: error.localizedDescription
+                )
+            }
+        case .failure(let error):
+            importResult = ImportResult(
+                isSuccess: false,
+                message: error.localizedDescription
+            )
+        }
+    }
+}
+
+// MARK: - Résultat d'import
+
+/// Résultat affiché à l'utilisateur après une tentative d'import CSV.
+struct ImportResult: Identifiable {
+    let id = UUID()
+    let isSuccess: Bool
+    let message: String
 }
 
 // MARK: - Fichier partageable

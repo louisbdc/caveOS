@@ -9,6 +9,11 @@ struct WineFilter: Equatable {
     var minPrice: Double? = nil
     var maxPrice: Double? = nil
     var regionName: String? = nil
+    var grapeName: String? = nil
+    var appellationName: String? = nil
+    var vintageMin: Int? = nil
+    var vintageMax: Int? = nil
+    var locationName: String? = nil
 
     /// Aucun critère actif (hors texte vide).
     var isEmpty: Bool {
@@ -18,6 +23,11 @@ struct WineFilter: Equatable {
             && minPrice == nil
             && maxPrice == nil
             && regionName == nil
+            && grapeName == nil
+            && appellationName == nil
+            && vintageMin == nil
+            && vintageMax == nil
+            && locationName == nil
     }
 
     /// Indique si une bouteille satisfait l'ensemble des critères.
@@ -27,6 +37,10 @@ struct WineFilter: Equatable {
             && matchesStatus(bottle, now: now)
             && matchesPrice(bottle)
             && matchesRegion(bottle)
+            && matchesGrape(bottle)
+            && matchesAppellation(bottle)
+            && matchesVintage(bottle)
+            && matchesLocation(bottle)
     }
 
     // MARK: - Sous-critères
@@ -67,6 +81,31 @@ struct WineFilter: Equatable {
     private func matchesRegion(_ bottle: Bottle) -> Bool {
         guard let regionName else { return true }
         return bottle.wine?.region?.name == regionName
+    }
+
+    private func matchesGrape(_ bottle: Bottle) -> Bool {
+        guard let grapeName else { return true }
+        let grapes = bottle.wine?.grapes ?? []
+        return grapes.contains { $0.name == grapeName }
+    }
+
+    private func matchesAppellation(_ bottle: Bottle) -> Bool {
+        guard let appellationName else { return true }
+        return bottle.wine?.appellation?.name == appellationName
+    }
+
+    private func matchesVintage(_ bottle: Bottle) -> Bool {
+        guard vintageMin != nil || vintageMax != nil else { return true }
+        guard let vintage = bottle.vintage, vintage > 0 else { return false }
+        if let min = vintageMin, vintage < min { return false }
+        if let max = vintageMax, vintage > max { return false }
+        return true
+    }
+
+    private func matchesLocation(_ bottle: Bottle) -> Bool {
+        guard let locationName else { return true }
+        guard let location = bottle.location else { return false }
+        return location.cellar?.name == locationName || location.label == locationName
     }
 }
 

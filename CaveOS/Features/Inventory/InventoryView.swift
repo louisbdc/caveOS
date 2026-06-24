@@ -96,8 +96,11 @@ struct InventoryView: View {
     // MARK: - Actions
 
     private func delete(at offsets: IndexSet) {
+        let service = NotificationService()
         for index in offsets {
-            context.delete(bottles[index])
+            let bottle = bottles[index]
+            service.cancelAll(for: bottle)
+            context.delete(bottle)
         }
         try? context.save()
     }

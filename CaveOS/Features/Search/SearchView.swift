@@ -6,8 +6,18 @@ struct SearchView: View {
     @Query(sort: [SortDescriptor(\Bottle.createdAt, order: .reverse)])
     private var bottles: [Bottle]
 
+    @Query(sort: [SortDescriptor(\Grape.name)])
+    private var grapes: [Grape]
+
+    @Query(sort: [SortDescriptor(\Appellation.name)])
+    private var appellations: [Appellation]
+
+    @Query(sort: [SortDescriptor(\Cellar.name)])
+    private var cellars: [Cellar]
+
     @State private var filter = WineFilter()
     @State private var sort: SortOption = .dateAdded
+    @State private var sortAscending = false
 
     private let now = Date()
 
@@ -39,9 +49,12 @@ struct SearchView: View {
     // MARK: - Filtrage + tri (en mémoire)
 
     private var results: [Bottle] {
-        bottles
+        let comparator = sort.comparator
+        return bottles
             .filter { filter.matches($0, now: now) }
-            .sorted(by: sort.comparator)
+            .sorted { lhs, rhs in
+                sortAscending ? comparator(rhs, lhs) : comparator(lhs, rhs)
+            }
     }
 
     // MARK: - Barre de filtres
@@ -52,6 +65,10 @@ struct SearchView: View {
                 colorMenu
                 statusMenu
                 regionMenu
+                appellationMenu
+                grapeMenu
+                vintageMenu
+                locationMenu
                 priceMenu
                 if !filter.isEmpty {
                     Button {
@@ -143,6 +160,117 @@ struct SearchView: View {
         }
     }
 
+    private var appellationMenu: some View {
+        Menu {
+            Button {
+                filter.appellationName = nil
+            } label: {
+                Label("Toutes", systemImage: filter.appellationName == nil ? "checkmark" : "")
+            }
+            Divider()
+            ForEach(availableAppellations, id: \.self) { name in
+                Button {
+                    filter.appellationName = (filter.appellationName == name) ? nil : name
+                } label: {
+                    Label(name, systemImage: filter.appellationName == name ? "checkmark" : "")
+                }
+            }
+        } label: {
+            FilterChip(
+                title: filter.appellationName ?? "Appellation",
+                isActive: filter.appellationName != nil,
+                systemImage: "seal.fill"
+            )
+        }
+    }
+
+    private var grapeMenu: some View {
+        Menu {
+            Button {
+                filter.grapeName = nil
+            } label: {
+                Label("Tous", systemImage: filter.grapeName == nil ? "checkmark" : "")
+            }
+            Divider()
+            ForEach(availableGrapes, id: \.self) { name in
+                Button {
+                    filter.grapeName = (filter.grapeName == name) ? nil : name
+                } label: {
+                    Label(name, systemImage: filter.grapeName == name ? "checkmark" : "")
+                }
+            }
+        } label: {
+            FilterChip(
+                title: filter.grapeName ?? "Cépage",
+                isActive: filter.grapeName != nil,
+                systemImage: "leaf.fill"
+            )
+        }
+    }
+
+    private var vintageMenu: some View {
+        Menu {
+            Section("Millésime minimum") {
+                Button {
+                    filter.vintageMin = nil
+                } label: {
+                    Label("Indifférent", systemImage: filter.vintageMin == nil ? "checkmark" : "")
+                }
+                ForEach(availableVintages, id: \.self) { year in
+                    Button {
+                        filter.vintageMin = (filter.vintageMin == year) ? nil : year
+                    } label: {
+                        Label("\(year)", systemImage: filter.vintageMin == year ? "checkmark" : "")
+                    }
+                }
+            }
+            Section("Millésime maximum") {
+                Button {
+                    filter.vintageMax = nil
+                } label: {
+                    Label("Indifférent", systemImage: filter.vintageMax == nil ? "checkmark" : "")
+                }
+                ForEach(availableVintages, id: \.self) { year in
+                    Button {
+                        filter.vintageMax = (filter.vintageMax == year) ? nil : year
+                    } label: {
+                        Label("\(year)", systemImage: filter.vintageMax == year ? "checkmark" : "")
+                    }
+                }
+            }
+        } label: {
+            FilterChip(
+                title: vintageLabel,
+                isActive: filter.vintageMin != nil || filter.vintageMax != nil,
+                systemImage: "calendar"
+            )
+        }
+    }
+
+    private var locationMenu: some View {
+        Menu {
+            Button {
+                filter.locationName = nil
+            } label: {
+                Label("Tous", systemImage: filter.locationName == nil ? "checkmark" : "")
+            }
+            Divider()
+            ForEach(availableLocations, id: \.self) { name in
+                Button {
+                    filter.locationName = (filter.locationName == name) ? nil : name
+                } label: {
+                    Label(name, systemImage: filter.locationName == name ? "checkmark" : "")
+                }
+            }
+        } label: {
+            FilterChip(
+                title: filter.locationName ?? "Emplacement",
+                isActive: filter.locationName != nil,
+                systemImage: "square.grid.3x3.fill"
+            )
+        }
+    }
+
     private var priceMenu: some View {
         Menu {
             ForEach(PriceRange.allCases) { range in
@@ -176,8 +304,13 @@ struct SearchView: View {
                         Text(option.label).tag(option)
                     }
                 }
+                Divider()
+                Picker("Sens", selection: $sortAscending) {
+                    Label("Ascendant", systemImage: "arrow.up").tag(true)
+                    Label("Descendant", systemImage: "arrow.down").tag(false)
+                }
             } label: {
-                Image(systemName: "arrow.up.arrow.down")
+                Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
             }
         }
     }
@@ -196,6 +329,43 @@ struct SearchView: View {
     private var availableRegions: [String] {
         let names = bottles.compactMap { $0.wine?.region?.name }
         return Set(names).sorted()
+    }
+
+    private var availableAppellations: [String] {
+        let names = appellations.map { $0.name }.filter { !$0.isEmpty }
+        return Set(names).sorted()
+    }
+
+    private var availableGrapes: [String] {
+        let names = grapes.map { $0.name }.filter { !$0.isEmpty }
+        return Set(names).sorted()
+    }
+
+    private var availableVintages: [Int] {
+        let years = bottles.compactMap { $0.vintage }.filter { $0 > 0 }
+        return Set(years).sorted(by: >)
+    }
+
+    private var availableLocations: [String] {
+        var names: Set<String> = []
+        for cellar in cellars where !cellar.name.isEmpty {
+            names.insert(cellar.name)
+        }
+        for bottle in bottles {
+            if let label = bottle.location?.label, !label.isEmpty {
+                names.insert(label)
+            }
+        }
+        return names.sorted()
+    }
+
+    private var vintageLabel: String {
+        switch (filter.vintageMin, filter.vintageMax) {
+        case (nil, nil): return "Millésime"
+        case let (min?, max?): return min == max ? "\(min)" : "\(min)–\(max)"
+        case let (min?, nil): return "≥ \(min)"
+        case let (nil, max?): return "≤ \(max)"
+        }
     }
 
     private var priceLabel: String {

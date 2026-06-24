@@ -10,6 +10,7 @@ struct BottleEditView: View {
     @Query(sort: \Region.name) private var regions: [Region]
     @Query(sort: \Appellation.name) private var appellations: [Appellation]
     @Query(sort: \Grape.name) private var grapes: [Grape]
+    @Query(sort: \Cellar.createdAt, order: .reverse) private var cellars: [Cellar]
 
     /// Bouteille existante (édition) ou nil (création).
     private let existingBottle: Bottle?
@@ -40,6 +41,16 @@ struct BottleEditView: View {
     @State private var remainingServingsText: String
     @State private var conservation: ConservationMethod
 
+    // MARK: - Emplacement / orientation / apogée / code-barres (CDC 5.1, 5.2, 5.5, 9)
+    @State private var selectedLocationID: UUID?
+    @State private var isLyingDown: Bool
+    @State private var apogeeMinText: String
+    @State private var apogeePeakText: String
+    @State private var apogeeMaxText: String
+    @State private var ean: String
+    @State private var isFavorite: Bool
+    @State private var lowStockThresholdText: String
+
     init(bottle: Bottle? = nil, prefill: ScannedLabel? = nil) {
         self.existingBottle = bottle
 
@@ -67,6 +78,15 @@ struct BottleEditView: View {
         _openedDate = State(initialValue: bottle?.openedDate ?? Date())
         _remainingServingsText = State(initialValue: bottle?.remainingServings.map(String.init) ?? "")
         _conservation = State(initialValue: bottle?.conservation ?? .none)
+
+        _selectedLocationID = State(initialValue: bottle?.location?.id)
+        _isLyingDown = State(initialValue: bottle?.isLyingDown ?? true)
+        _apogeeMinText = State(initialValue: bottle?.apogeeMinOverride.map(String.init) ?? "")
+        _apogeePeakText = State(initialValue: bottle?.apogeePeakOverride.map(String.init) ?? "")
+        _apogeeMaxText = State(initialValue: bottle?.apogeeMaxOverride.map(String.init) ?? "")
+        _ean = State(initialValue: bottle?.ean ?? "")
+        _isFavorite = State(initialValue: wine?.isFavorite ?? false)
+        _lowStockThresholdText = State(initialValue: wine?.lowStockThreshold.map(String.init) ?? "")
     }
 
     private var isValid: Bool {
@@ -80,6 +100,11 @@ struct BottleEditView: View {
                 originSection
                 grapesSection
                 bottleSection
+                locationSection
+                orientationSection
+                apogeeOverrideSection
+                barcodeSection
+                favoriteSection
                 purchaseSection
                 stateSection
                 notesSection
@@ -166,6 +191,73 @@ struct BottleEditView: View {
         }
     }
 
+    /// Emplacements disponibles, triés par cave puis par libellé (CDC 5.1).
+    private var availableLocations: [(cellar: Cellar, location: Location)] {
+        cellars.flatMap { cellar in
+            cellar.locations
+                .sorted { $0.label < $1.label }
+                .map { (cellar: cellar, location: $0) }
+        }
+    }
+
+    private var locationSection: some View {
+        Section("Emplacement") {
+            if availableLocations.isEmpty {
+                Text("Aucun emplacement disponible").foregroundStyle(.secondary)
+            } else {
+                Picker("Emplacement", selection: $selectedLocationID) {
+                    Text("Aucun").tag(UUID?.none)
+                    ForEach(availableLocations, id: \.location.id) { entry in
+                        Text("\(entry.cellar.name) · \(entry.location.label)")
+                            .tag(UUID?.some(entry.location.id))
+                    }
+                }
+            }
+        }
+    }
+
+    private var orientationSection: some View {
+        Section("Orientation") {
+            Picker("Position", selection: $isLyingDown) {
+                Text("Couchée").tag(true)
+                Text("Debout").tag(false)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var apogeeOverrideSection: some View {
+        Section {
+            TextField("Début (année)", text: $apogeeMinText)
+                .keyboardType(.numberPad)
+            TextField("Pic (année)", text: $apogeePeakText)
+                .keyboardType(.numberPad)
+            TextField("Fin (année)", text: $apogeeMaxText)
+                .keyboardType(.numberPad)
+        } header: {
+            Text("Apogée (override manuel)")
+        } footer: {
+            Text("Laissez vide pour utiliser le calcul automatique.")
+        }
+    }
+
+    private var barcodeSection: some View {
+        Section("Code-barres") {
+            TextField("EAN", text: $ean)
+                .keyboardType(.numbersAndPunctuation)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+    }
+
+    private var favoriteSection: some View {
+        Section("Suivi") {
+            Toggle("Vin favori", isOn: $isFavorite)
+            TextField("Seuil de stock bas", text: $lowStockThresholdText)
+                .keyboardType(.numberPad)
+        }
+    }
+
     private var purchaseSection: some View {
         Section("Achat") {
             TextField("Prix d'achat (€)", text: $purchasePriceText)
@@ -217,6 +309,12 @@ struct BottleEditView: View {
         return value
     }
 
+    private func parsedOptionalInt(_ text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, let value = Int(trimmed) else { return nil }
+        return value
+    }
+
     private func parsedPrice() -> Double? {
         let normalized = purchasePriceText
             .replacingOccurrences(of: ",", with: ".")
@@ -251,6 +349,8 @@ struct BottleEditView: View {
         wine.region = region
         wine.appellation = appellation
         wine.grapes = selectedGrapes
+        wine.isFavorite = isFavorite
+        wine.lowStockThreshold = parsedOptionalInt(lowStockThresholdText)
 
         let producerName = self.producerName.trimmingCharacters(in: .whitespacesAndNewlines)
         if producerName.isEmpty {
@@ -273,6 +373,13 @@ struct BottleEditView: View {
         bottle.storageQuality = storageQuality
         bottle.notes = notes.isEmpty ? nil : notes
         bottle.state = state
+        bottle.location = availableLocations.first { $0.location.id == selectedLocationID }?.location
+        bottle.isLyingDown = isLyingDown
+        bottle.apogeeMinOverride = parsedOptionalInt(apogeeMinText)
+        bottle.apogeePeakOverride = parsedOptionalInt(apogeePeakText)
+        bottle.apogeeMaxOverride = parsedOptionalInt(apogeeMaxText)
+        let trimmedEan = ean.trimmingCharacters(in: .whitespacesAndNewlines)
+        bottle.ean = trimmedEan.isEmpty ? nil : trimmedEan
 
         if state == .opened {
             bottle.openedDate = openedDate
@@ -286,6 +393,9 @@ struct BottleEditView: View {
         bottle.updatedAt = Date()
 
         try? context.save()
+
+        Task { await NotificationService().syncAlerts(for: bottle) }
+
         dismiss()
     }
 }

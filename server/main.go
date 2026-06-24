@@ -504,13 +504,14 @@ var errNoMatch = errors.New("no match")
 // tierMultiplier maps a region quality tier to a longevity multiplier applied
 // to the grape's ageing window. This mirrors the heuristic used in the iOS app.
 func tierMultiplier(tier int) float64 {
+	// Aligné sur le CDC 6.4 et l'app (QualityTier.multiplier): premium ×1,4 / milieu ×1,0 / entrée ×0,6.
 	switch tier {
-	case 3:
-		return 1.3
-	case 2:
-		return 1.1
-	case 1:
-		return 0.9
+	case 3: // premium
+		return 1.4
+	case 2: // milieu de gamme
+		return 1.0
+	case 1: // entrée de gamme
+		return 0.6
 	default:
 		return 1.0
 	}

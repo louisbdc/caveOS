@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.louisbdc
   deploymentTarget:
     iOS: "17.0"
+    watchOS: "10.0"
   developmentLanguage: fr
   createIntermediateGroups: true
 
@@ -54,6 +55,19 @@ targets:
         CODE_SIGN_ENTITLEMENTS: CaveOSWidget/CaveOSWidget.entitlements
         SKIP_INSTALL: NO
 
+  CaveOSWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - CaveOSWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.louisbdc.caveos.watchkitapp
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_WKApplication: YES
+        INFOPLIST_KEY_CFBundleDisplayName: CaveOS
+        TARGETED_DEVICE_FAMILY: "4"
+
   CaveOSTests:
     type: bundle.unit-test
     platform: iOS
@@ -76,3 +90,7 @@ schemes:
     test:
       targets:
         - CaveOSTests
+  CaveOSWatch:
+    build:
+      targets:
+        CaveOSWatch: all

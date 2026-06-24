@@ -20,6 +20,13 @@ struct ScanView: View {
     // Lignes OCR brutes accumulées.
     @State private var recognizedLines: [String] = []
 
+    // Code-barres (EAN) capté en direct ou détecté.
+    @State private var scannedEAN: String?
+
+    // Format et degré détectés par l'analyse (affichés en lecture seule).
+    @State private var detectedFormat: String?
+    @State private var detectedABV: String?
+
     // Champs détectés / éditables.
     @State private var producer: String = ""
     @State private var wineName: String = ""
@@ -71,9 +78,14 @@ struct ScanView: View {
     @ViewBuilder
     private var captureArea: some View {
         if LiveScannerAvailability.isAvailable {
-            DataScannerRepresentable { lines in
-                recognizedLines = lines
-            }
+            DataScannerRepresentable(
+                onRecognizedText: { lines in
+                    recognizedLines = lines
+                },
+                onRecognizedBarcode: { payload in
+                    scannedEAN = payload
+                }
+            )
             .ignoresSafeArea(edges: .horizontal)
         } else {
             ScannerUnavailableView()
@@ -129,8 +141,28 @@ struct ScanView: View {
                 .keyboardType(.numberPad)
             labeledField("Appellation", text: $appellation)
             labeledField("Cépages (séparés par des virgules)", text: $grapesText)
+
+            if let detectedFormat {
+                readOnlyField("Format", value: detectedFormat)
+            }
+            if let detectedABV {
+                readOnlyField("Degré", value: detectedABV)
+            }
+            if let scannedEAN {
+                readOnlyField("Code-barres (EAN)", value: scannedEAN, monospaced: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func readOnlyField(_ title: String, value: String, monospaced: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(monospaced ? .body.monospaced() : .body)
+        }
     }
 
     private func labeledField(_ title: String, text: Binding<String>) -> some View {
@@ -204,11 +236,16 @@ struct ScanView: View {
         vintageText = label.vintage.map(String.init) ?? ""
         appellation = label.appellation ?? ""
         grapesText = label.grapes.joined(separator: ", ")
+        detectedFormat = label.format
+        detectedABV = label.abv
     }
 
     private func validate() {
         var label = ScannedLabel()
         label.rawLines = recognizedLines
+        label.ean = scannedEAN
+        label.format = detectedFormat
+        label.abv = detectedABV
         label.producer = producer.isEmpty ? nil : producer
         label.wineName = wineName.isEmpty ? nil : wineName
         label.vintage = Int(vintageText.trimmingCharacters(in: .whitespaces))
@@ -244,19 +281,26 @@ struct ScanView: View {
     }
 
     private func recognizeText(in cgImage: CGImage) async throws -> [String] {
-        try await withCheckedThrowingContinuation { continuation in
+        let customWords = makeCustomWords()
+        return try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error {
                     continuation.resume(throwing: error)
                     return
                 }
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+                // On lit plusieurs candidats par observation mais retient le meilleur.
+                let lines = observations.compactMap { observation -> String? in
+                    let candidates = observation.topCandidates(10)
+                    return candidates.first?.string
+                }
                 continuation.resume(returning: lines)
             }
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
-            request.recognitionLanguages = ["fr-FR", "en-US"]
+            request.recognitionLanguages = ["fr-FR", "en-US", "it-IT", "es-ES"]
+            request.minimumTextHeight = 0.012
+            request.customWords = customWords
 
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             do {
@@ -265,5 +309,17 @@ struct ScanView: View {
                 continuation.resume(throwing: error)
             }
         }
+    }
+
+    /// Vocabulaire spécialisé injecté dans l'OCR : cépages, appellations et mentions usuelles.
+    private func makeCustomWords() -> [String] {
+        let mentions = [
+            "Grand Cru",
+            "Premier Cru",
+            "Appellation",
+            "Contrôlée",
+            "Mis en bouteille au château"
+        ]
+        return knownGrapes + knownAppellations + mentions
     }
 }

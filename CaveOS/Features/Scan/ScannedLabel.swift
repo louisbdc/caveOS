@@ -7,6 +7,9 @@ struct ScannedLabel {
     var vintage: Int?
     var appellation: String?
     var grapes: [String]
+    var ean: String?
+    var format: String?
+    var abv: String?
     var rawLines: [String]
 
     init() {
@@ -15,6 +18,9 @@ struct ScannedLabel {
         self.vintage = nil
         self.appellation = nil
         self.grapes = []
+        self.ean = nil
+        self.format = nil
+        self.abv = nil
         self.rawLines = []
     }
 }

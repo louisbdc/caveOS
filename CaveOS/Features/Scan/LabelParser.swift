@@ -28,7 +28,10 @@ enum LabelParser {
 
         label.vintage = detectVintage(in: cleanedLines)
         label.appellation = detectAppellation(in: cleanedLines, known: knownAppellations)
+            ?? detectAppellationMention(in: cleanedLines)
         label.grapes = detectGrapes(in: cleanedLines, known: knownGrapes)
+        label.format = detectFormat(in: cleanedLines)
+        label.abv = detectABV(in: cleanedLines)
         label.producer = detectProducer(in: cleanedLines)
         label.wineName = detectWineName(
             in: cleanedLines,
@@ -53,7 +56,7 @@ enum LabelParser {
             for match in matches {
                 guard let r = Range(match.range, in: line),
                       let year = Int(line[r]) else { continue }
-                if year <= currentYear {
+                if year >= 1900, year <= currentYear {
                     candidates.append(year)
                 }
             }
@@ -93,6 +96,55 @@ enum LabelParser {
         }
 
         return best?.name
+    }
+
+    /// Détecte une mention « Appellation … Contrôlée/Protégée » dans le texte brut,
+    /// utilisée en repli lorsque le match flou n'a rien trouvé.
+    private static func detectAppellationMention(in lines: [String]) -> String? {
+        let joined = lines.joined(separator: " ")
+        guard let regex = try? NSRegularExpression(
+            pattern: "Appellation\\s+(.+?)\\s+(Contr[oô]lée|Prot[eé]gée)",
+            options: [.caseInsensitive]
+        ) else { return nil }
+
+        let range = NSRange(joined.startIndex..<joined.endIndex, in: joined)
+        guard let match = regex.firstMatch(in: joined, range: range),
+              match.numberOfRanges > 1,
+              let r = Range(match.range(at: 1), in: joined) else { return nil }
+
+        let captured = joined[r].trimmingCharacters(in: .whitespacesAndNewlines)
+        return captured.isEmpty ? nil : captured
+    }
+
+    // MARK: - Format
+
+    private static func detectFormat(in lines: [String]) -> String? {
+        let joined = lines.joined(separator: " ")
+        guard let regex = try? NSRegularExpression(
+            pattern: "(75\\s?cl|750\\s?ml|magnum)",
+            options: [.caseInsensitive]
+        ) else { return nil }
+
+        let range = NSRange(joined.startIndex..<joined.endIndex, in: joined)
+        guard let match = regex.firstMatch(in: joined, range: range),
+              let r = Range(match.range, in: joined) else { return nil }
+
+        return String(joined[r])
+    }
+
+    // MARK: - Degré d'alcool
+
+    private static func detectABV(in lines: [String]) -> String? {
+        let joined = lines.joined(separator: " ")
+        guard let regex = try? NSRegularExpression(
+            pattern: "\\d{1,2}([.,]\\d)?\\s?%"
+        ) else { return nil }
+
+        let range = NSRange(joined.startIndex..<joined.endIndex, in: joined)
+        guard let match = regex.firstMatch(in: joined, range: range),
+              let r = Range(match.range, in: joined) else { return nil }
+
+        return joined[r].trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: - Cépages
