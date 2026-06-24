@@ -49,7 +49,8 @@ Voir [`server/README.md`](server/README.md). Service Go (binaire statique, SQLit
 
 ## 🚀 Mise en ligne
 
-Guide complet pour publier l'app sur l'**App Store** et déployer le **serveur** (API + Stripe, HTTPS) : **[DEPLOY.md](DEPLOY.md)**.
+- Déploiement **serveur** (API + Stripe, HTTPS) : **[DEPLOY.md](DEPLOY.md)**
+- Publication **App Store** pas à pas (App Store Connect, signing, TestFlight, fiche, soumission) : **[APP_STORE_CONNECT.md](APP_STORE_CONNECT.md)**
 
 ## Fonctionnalités (CDC couvert)
 
