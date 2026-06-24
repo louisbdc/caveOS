@@ -1,0 +1,28 @@
+[Unit]
+Description=caveOS wine data API server (caveos-server)
+Documentation=https://github.com/louisdecaumont/caveOS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/caveos-server
+ExecStart=/home/ubuntu/caveos-server/caveos-server
+Restart=always
+RestartSec=3
+Environment=PORT=8080
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=false
+PrivateTmp=true
+
+# Logs go to the journal (slog JSON on stdout/stderr)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=caveos-server
+
+[Install]
+WantedBy=multi-user.target

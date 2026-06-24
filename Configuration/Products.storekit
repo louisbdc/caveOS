@@ -1,0 +1,135 @@
+{
+  "identifier" : "B1F0A2C4-1A2B-4C3D-9E5F-CAVEOS000001",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "CAVEOS-LIFETIME-0001",
+      "localizations" : [
+        {
+          "description" : "Débloquez CaveOS Pro à vie : scan illimité, sync iCloud, analytics et dégustation avancée. Paiement unique.",
+          "displayName" : "CaveOS Pro à vie",
+          "locale" : "fr_FR"
+        },
+        {
+          "description" : "Unlock CaveOS Pro forever: unlimited scanning, iCloud sync, analytics and advanced tasting. One-time purchase.",
+          "displayName" : "CaveOS Pro Lifetime",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.louisbdc.caveos.pro.lifetime",
+      "referenceName" : "CaveOS Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "1000000000",
+    "_developerTeamID" : "CAVEOSTEAM",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "fr_FR",
+    "_storefront" : "FRA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "CAVEOS-PRO-GROUP-0001",
+      "localizations" : [
+        {
+          "description" : "Accès complet à CaveOS Pro.",
+          "displayName" : "CaveOS Pro",
+          "locale" : "fr_FR"
+        }
+      ],
+      "name" : "CaveOS Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "CAVEOS-YEARLY-0001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Abonnement annuel CaveOS Pro : scan illimité, sync iCloud, analytics et dégustation avancée.",
+              "displayName" : "CaveOS Pro Annuel",
+              "locale" : "fr_FR"
+            },
+            {
+              "description" : "CaveOS Pro yearly subscription: unlimited scanning, iCloud sync, analytics and advanced tasting.",
+              "displayName" : "CaveOS Pro Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.louisbdc.caveos.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "CaveOS Pro Yearly",
+          "subscriptionGroupID" : "CAVEOS-PRO-GROUP-0001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Xcode (projet généré par XcodeGen depuis project.yml)
+*.xcodeproj/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Go server
+server/caveos-server
+server/wine.db
+server/*.db
+
+# Secrets / env
+*.env
+.env
+
+# Logs
+*.log
+
+# Claude Code (interne)
+.claude/
