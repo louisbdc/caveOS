@@ -6,7 +6,16 @@ enum LabelParser {
 
     // Mots-clés indiquant un nom de domaine / propriété.
     private static let producerKeywords = [
-        "château", "chateau", "domaine", "clos", "mas", "bodega", "tenuta"
+        "château", "chateau", "domaine", "clos", "mas", "bodega", "tenuta",
+        "weingut", "cantina", "quinta", "maison", "cave", "vignoble", "estate"
+    ]
+
+    // Termes qui disqualifient une ligne comme nom de producteur (mentions légales).
+    private static let nonProducerTerms = [
+        "appellation", "controlee", "contrôlée", "protegee", "protégée",
+        "mis en bouteille", "mise en bouteille", "produit de", "product of",
+        "grand vin", "vol.", "% vol", "contient", "sulfites", "aop", "aoc",
+        "igp", "doc", "docg"
     ]
 
     /// Année courante, utilisée pour filtrer les millésimes aberrants.
@@ -102,34 +111,81 @@ enum LabelParser {
     /// utilisée en repli lorsque le match flou n'a rien trouvé.
     private static func detectAppellationMention(in lines: [String]) -> String? {
         let joined = lines.joined(separator: " ")
-        guard let regex = try? NSRegularExpression(
-            pattern: "Appellation\\s+(.+?)\\s+(Contr[oô]lée|Prot[eé]gée)",
-            options: [.caseInsensitive]
-        ) else { return nil }
 
-        let range = NSRange(joined.startIndex..<joined.endIndex, in: joined)
-        guard let match = regex.firstMatch(in: joined, range: range),
-              match.numberOfRanges > 1,
-              let r = Range(match.range(at: 1), in: joined) else { return nil }
+        // « Appellation X (d'Origine) Contrôlée/Protégée » ou acronyme « AOC/AOP/AOVDQS X ».
+        let patterns = [
+            "Appellation\\s+(?:d['’]Origine\\s+)?(.+?)\\s+(?:Contr[oô]l[ée]+e|Prot[ée]+g[ée]+e)",
+            "\\b(?:AOC|AOP|AOVDQS|DOCG|DOC|IGP)\\s+([A-Za-zÀ-ÿ' \\-]{3,40})"
+        ]
 
-        let captured = joined[r].trimmingCharacters(in: .whitespacesAndNewlines)
-        return captured.isEmpty ? nil : captured
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+            let range = NSRange(joined.startIndex..<joined.endIndex, in: joined)
+            if let match = regex.firstMatch(in: joined, range: range),
+               match.numberOfRanges > 1,
+               let r = Range(match.range(at: 1), in: joined) {
+                let captured = joined[r].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !captured.isEmpty { return captured }
+            }
+        }
+        return nil
     }
 
     // MARK: - Format
 
     private static func detectFormat(in lines: [String]) -> String? {
-        let joined = lines.joined(separator: " ")
+        let text = normalize(lines.joined(separator: " "))
+
+        // Formats nommés (priorité car non ambigus).
+        let named: [(needles: [String], label: String)] = [
+            (["nabuchodonosor"], "Nabuchodonosor (15 L)"),
+            (["balthazar"], "Balthazar (12 L)"),
+            (["salmanazar"], "Salmanazar (9 L)"),
+            (["mathusalem", "mathusalah"], "Mathusalem (6 L)"),
+            (["rehoboam", "réhoboam"], "Réhoboam (4,5 L)"),
+            (["double magnum"], "Double Magnum (3 L)"),
+            (["jeroboam", "jéroboam"], "Jéroboam (3 L)"),
+            (["magnum"], "Magnum (1,5 L)"),
+            (["piccolo"], "Piccolo (20 cl)"),
+            (["demi", "half"], "Demi (37,5 cl)")
+        ]
+        for entry in named where entry.needles.contains(where: { text.contains($0) }) {
+            return entry.label
+        }
+
+        // Volume explicite (cl / ml / L), ex. "75 cl", "750ml", "1,5 l".
+        if let volume = detectVolumeFormat(in: text) {
+            return volume
+        }
+        return nil
+    }
+
+    /// Reconnaît un volume chiffré et le ramène au format standard le plus proche.
+    private static func detectVolumeFormat(in text: String) -> String? {
         guard let regex = try? NSRegularExpression(
-            pattern: "(75\\s?cl|750\\s?ml|magnum)",
-            options: [.caseInsensitive]
+            pattern: "([0-9]+(?:[.,][0-9]+)?)\\s?(cl|ml|l)\\b"
         ) else { return nil }
 
-        let range = NSRange(joined.startIndex..<joined.endIndex, in: joined)
-        guard let match = regex.firstMatch(in: joined, range: range),
-              let r = Range(match.range, in: joined) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let numberRange = Range(match.range(at: 1), in: text),
+              let unitRange = Range(match.range(at: 2), in: text) else { return nil }
 
-        return String(joined[r])
+        let number = Double(text[numberRange].replacingOccurrences(of: ",", with: ".")) ?? 0
+        let unit = String(text[unitRange])
+        let centiliters: Double
+        switch unit {
+        case "ml": centiliters = number / 10
+        case "l": centiliters = number * 100
+        default: centiliters = number   // cl
+        }
+
+        // Associe au format standard dont la contenance est la plus proche.
+        guard centiliters > 0,
+              let closest = BottleFormat.allCases.min(by: {
+                  abs(Double($0.centiliters) - centiliters) < abs(Double($1.centiliters) - centiliters)
+              }) else { return nil }
+        return closest.label
     }
 
     // MARK: - Degré d'alcool
@@ -137,14 +193,21 @@ enum LabelParser {
     private static func detectABV(in lines: [String]) -> String? {
         let joined = lines.joined(separator: " ")
         guard let regex = try? NSRegularExpression(
-            pattern: "\\d{1,2}([.,]\\d)?\\s?%"
+            pattern: "(\\d{1,2}(?:[.,]\\d)?)\\s?%"
         ) else { return nil }
 
         let range = NSRange(joined.startIndex..<joined.endIndex, in: joined)
-        guard let match = regex.firstMatch(in: joined, range: range),
-              let r = Range(match.range, in: joined) else { return nil }
-
-        return joined[r].trimmingCharacters(in: .whitespaces)
+        let matches = regex.matches(in: joined, range: range)
+        for match in matches {
+            guard let valueRange = Range(match.range(at: 1), in: joined),
+                  let full = Range(match.range, in: joined) else { continue }
+            let value = Double(joined[valueRange].replacingOccurrences(of: ",", with: ".")) ?? 0
+            // On ne retient qu'un degré d'alcool réaliste pour un vin.
+            if (3.0...25.0).contains(value) {
+                return joined[full].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
     }
 
     // MARK: - Cépages
@@ -169,16 +232,22 @@ enum LabelParser {
     // MARK: - Domaine / Producteur
 
     private static func detectProducer(in lines: [String]) -> String? {
-        // Ligne contenant un mot-clé de propriété.
+        // Ligne contenant un mot-clé de propriété (et pas une mention légale).
         for line in lines {
             let lowered = normalize(line)
-            if producerKeywords.contains(where: { lowered.contains($0) }) {
+            if producerKeywords.contains(where: { lowered.contains($0) }),
+               !isNonProducerLine(lowered) {
                 return line
             }
         }
-        // Fallback : la plus longue ligne du haut (3 premières lignes).
-        let top = Array(lines.prefix(3))
-        return top.max(by: { $0.count < $1.count })
+        // Fallback : la plus longue ligne du haut, en écartant les mentions légales.
+        let top = lines.prefix(3).filter { !isNonProducerLine(normalize($0)) }
+        return top.max(by: { $0.count < $1.count }) ?? lines.first
+    }
+
+    /// Une ligne est écartée comme producteur si elle ressemble à une mention légale.
+    private static func isNonProducerLine(_ normalizedLine: String) -> Bool {
+        nonProducerTerms.contains { normalizedLine.contains($0) }
     }
 
     // MARK: - Nom de cuvée

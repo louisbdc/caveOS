@@ -235,15 +235,31 @@ struct InventoryView: View {
     }
 
     /// Crée une bouteille pré-remplie depuis un scan puis ouvre l'éditeur dessus.
+    /// Relie tout le résultat OCR (producteur, appellation, cépages, EAN, format)
+    /// aux entités existantes pour éviter les doublons.
     private func createPrefilledBottle(from label: ScannedLabel) {
         let wine = Wine()
         wine.name = label.wineName ?? ""
         context.insert(wine)
 
-        if let producerName = label.producer, !producerName.isEmpty {
-            let producer = Producer(name: producerName)
-            context.insert(producer)
-            wine.producer = producer
+        if let producerName = label.producer?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !producerName.isEmpty {
+            wine.producer = resolveProducer(named: producerName)
+        }
+
+        if let appellationName = label.appellation,
+           let appellation = firstMatch(of: Appellation.self, name: appellationName, key: { $0.name }) {
+            wine.appellation = appellation
+            if let regionName = appellation.regionName,
+               let region = firstMatch(of: Region.self, name: regionName, key: { $0.name }) {
+                wine.region = region
+            }
+        }
+
+        if !label.grapes.isEmpty {
+            wine.grapes = label.grapes.compactMap { name in
+                firstMatch(of: Grape.self, name: name, key: { $0.name })
+            }
         }
 
         let bottle = Bottle()
@@ -251,10 +267,37 @@ struct InventoryView: View {
         if let vintage = label.vintage, vintage > 0 {
             bottle.vintage = vintage
         }
+        if let ean = label.ean, let valid = ScanView.validEAN(ean) {
+            bottle.ean = valid
+        }
+        if let formatLabel = label.format,
+           let format = BottleFormat.allCases.first(where: { $0.label == formatLabel }) {
+            bottle.format = format
+        }
         context.insert(bottle)
         try? context.save()
         SnapshotCoordinator.refresh(modelContext: context)
 
         prefilledBottle = bottle
+    }
+
+    /// Réutilise un producteur existant (insensible casse/accents) ou en crée un.
+    private func resolveProducer(named name: String) -> Producer {
+        if let existing = firstMatch(of: Producer.self, name: name, key: { $0.name }) {
+            return existing
+        }
+        let producer = Producer(name: name)
+        context.insert(producer)
+        return producer
+    }
+
+    /// Recherche une entité de référence par nom (insensible casse/accents).
+    private func firstMatch<T: PersistentModel>(
+        of type: T.Type, name: String, key: (T) -> String
+    ) -> T? {
+        let target = name.foldedForMatch
+        guard !target.isEmpty else { return nil }
+        let all = (try? context.fetch(FetchDescriptor<T>())) ?? []
+        return all.first { key($0).foldedForMatch == target }
     }
 }
