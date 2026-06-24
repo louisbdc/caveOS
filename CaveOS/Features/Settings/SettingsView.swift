@@ -9,6 +9,8 @@ struct SettingsView: View {
     @Query(sort: \Bottle.createdAt, order: .reverse) private var bottles: [Bottle]
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.isPresented) private var isPresented
+    @Environment(\.dismiss) private var dismiss
 
     @State private var notificationsEnabled = false
     @State private var isRequestingAuthorization = false
@@ -54,6 +56,13 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Réglages")
+            .toolbar {
+                if isPresented {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("OK") { dismiss() }
+                    }
+                }
+            }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
             }

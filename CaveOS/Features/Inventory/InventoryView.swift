@@ -11,6 +11,7 @@ struct InventoryView: View {
     @State private var isScanning = false
     @State private var scanPrefill: ScannedLabel?
     @State private var prefilledBottle: Bottle?
+    @State private var isShowingSettings = false
 
     var body: some View {
         NavigationStack {
@@ -39,9 +40,20 @@ struct InventoryView: View {
                     }
                     .accessibilityLabel("Ajouter une bouteille")
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        isShowingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Réglages")
+                }
             }
             .sheet(isPresented: $isCreating) {
                 BottleEditView()
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsView()
             }
             .sheet(item: $prefilledBottle) { bottle in
                 BottleEditView(bottle: bottle)

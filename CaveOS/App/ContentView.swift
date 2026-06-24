@@ -81,10 +81,17 @@ struct ContentView: View {
 }
 
 /// Navigation par onglets pour iPhone (et largeurs compactes).
+/// On se limite à 5 onglets pour éviter l'onglet système « Autre » (qui ajoute
+/// une barre de navigation parasite). Les Réglages sont accessibles via la roue
+/// crantée de l'écran Inventaire.
 private struct TabNavigation: View {
+    private var tabs: [RootDestination] {
+        RootDestination.allCases.filter { $0 != .settings }
+    }
+
     var body: some View {
         TabView {
-            ForEach(RootDestination.allCases) { item in
+            ForEach(tabs) { item in
                 item.destination
                     .tabItem {
                         Label(item.label, systemImage: item.systemImage)
