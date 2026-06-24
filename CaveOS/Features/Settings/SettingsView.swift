@@ -251,6 +251,11 @@ struct SettingsView: View {
             } label: {
                 Label("Codes matériel", systemImage: "barcode.viewfinder")
             }
+            NavigationLink {
+                TemperatureCellarListView()
+            } label: {
+                Label("Relevés de température", systemImage: "thermometer.medium")
+            }
         }
     }
 
@@ -357,6 +362,33 @@ struct CSVFile: Transferable {
 }
 
 // MARK: - Partage de cave
+
+/// Liste des caves, chacune menant à son journal de relevés de température.
+struct TemperatureCellarListView: View {
+    @Query(sort: \Cellar.createdAt, order: .reverse) private var cellars: [Cellar]
+
+    var body: some View {
+        List {
+            if cellars.isEmpty {
+                ContentUnavailableView(
+                    "Aucune cave",
+                    systemImage: "thermometer.medium",
+                    description: Text("Créez une cave pour suivre sa température.")
+                )
+            } else {
+                ForEach(cellars) { cellar in
+                    NavigationLink {
+                        TemperatureLogView(cellar: cellar)
+                    } label: {
+                        Label(cellar.name, systemImage: cellar.type.symbol)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Relevés de température")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
 
 /// Liste des caves, chacune menant à l'écran de partage correspondant.
 struct ShareCellarListView: View {

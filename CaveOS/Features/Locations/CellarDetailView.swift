@@ -57,6 +57,14 @@ struct CellarDetailView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    TemperatureLogView(cellar: cellar)
+                } label: {
+                    Image(systemName: "thermometer.medium")
+                }
+                .accessibilityLabel("Relevés de température")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showingEditor = true
                 } label: {

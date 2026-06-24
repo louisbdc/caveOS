@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 /// Formulaire de création / édition d'une bouteille (et du vin associé).
 /// Seul le nom du vin est requis.
@@ -54,6 +55,10 @@ struct BottleEditView: View {
     @State private var isFavorite: Bool
     @State private var lowStockThresholdText: String
 
+    // MARK: - Photo d'étiquette (matching visuel)
+    @State private var labelPhotoData: Data?
+    @State private var selectedLabelPhoto: PhotosPickerItem?
+
     init(bottle: Bottle? = nil, prefill: ScannedLabel? = nil) {
         self.existingBottle = bottle
         self.prefill = prefill
@@ -91,6 +96,7 @@ struct BottleEditView: View {
         _ean = State(initialValue: bottle?.ean ?? "")
         _isFavorite = State(initialValue: wine?.isFavorite ?? false)
         _lowStockThresholdText = State(initialValue: wine?.lowStockThreshold.map(String.init) ?? "")
+        _labelPhotoData = State(initialValue: bottle?.labelPhotoData)
     }
 
     private var isValid: Bool {
@@ -107,6 +113,7 @@ struct BottleEditView: View {
                 locationSection
                 orientationSection
                 apogeeOverrideSection
+                labelPhotoSection
                 barcodeSection
                 favoriteSection
                 purchaseSection
@@ -247,6 +254,41 @@ struct BottleEditView: View {
             Text("Apogée (override manuel)")
         } footer: {
             Text("Années absolues (ex. 2018, 2024, 2032). Laissez vide pour utiliser le calcul automatique basé sur le cépage, la région et la qualité de stockage.")
+        }
+    }
+
+    private var labelPhotoSection: some View {
+        Section {
+            if let data = labelPhotoData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 220)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.m))
+                Button(role: .destructive) {
+                    labelPhotoData = nil
+                    selectedLabelPhoto = nil
+                } label: {
+                    Label("Retirer la photo", systemImage: "trash")
+                }
+            }
+            PhotosPicker(selection: $selectedLabelPhoto, matching: .images) {
+                Label(labelPhotoData == nil ? "Ajouter une photo d'étiquette" : "Remplacer la photo",
+                      systemImage: "camera")
+            }
+        } header: {
+            Text("Photo d'étiquette")
+        } footer: {
+            Text("Optionnel. La photo permet de retrouver cette bouteille par comparaison visuelle (Réglages → Match visuel).")
+        }
+        .onChange(of: selectedLabelPhoto) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    labelPhotoData = data
+                }
+            }
         }
     }
 
@@ -456,6 +498,7 @@ struct BottleEditView: View {
         bottle.apogeeMaxOverride = parsedOptionalInt(apogeeMaxText)
         let trimmedEan = ean.trimmingCharacters(in: .whitespacesAndNewlines)
         bottle.ean = trimmedEan.isEmpty ? nil : trimmedEan
+        bottle.labelPhotoData = labelPhotoData
 
         if state == .opened {
             bottle.openedDate = openedDate

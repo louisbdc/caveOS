@@ -173,8 +173,24 @@ struct TemperatureLogView: View {
         do {
             try modelContext.save()
             newNote = ""
+            notifyIfOutOfRange(celsius: newCelsius)
         } catch {
             modelContext.delete(reading)
+        }
+    }
+
+    /// Envoie une notification si le relevé sort de la plage cible.
+    private func notifyIfOutOfRange(celsius: Double) {
+        guard isOutOfRange(celsius) else { return }
+        let name = cellar.name
+        let low = thresholds.low
+        let high = thresholds.high
+        Task {
+            let service = NotificationService()
+            if await service.authorizationStatus() == .notDetermined {
+                await service.requestAuthorization()
+            }
+            service.temperatureAlert(cellarName: name, celsius: celsius, low: low, high: high)
         }
     }
 
