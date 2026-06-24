@@ -286,8 +286,18 @@ struct PaywallView: View {
 
     // MARK: - Helpers prix
 
-    private var lifetimePrice: String { "50 €" }
-    private var subscriptionPrice: String { "30 € / an" }
+    /// Prix « à vie » réel issu de l'App Store (locale + devise), repli si non chargé.
+    private var lifetimePrice: String {
+        store.lifetimeProduct?.displayPrice ?? "50 €"
+    }
+
+    /// Prix de l'abonnement annuel réel issu de l'App Store, repli si non chargé.
+    private var subscriptionPrice: String {
+        guard let displayPrice = store.subscriptionProduct?.displayPrice else {
+            return "30 € / an"
+        }
+        return "\(displayPrice) / an"
+    }
 
 }
 
