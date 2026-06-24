@@ -2,6 +2,8 @@ import SwiftUI
 import PhotosUI
 import Vision
 import VisionKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 /// Vue de scan d'étiquette : capture en direct (VisionKit) ou import photo
 /// (Vision sur image fixe), puis analyse via `LabelParser` et récapitulatif éditable.
@@ -272,11 +274,60 @@ struct ScanView: View {
                   let cgImage = uiImage.cgImage else {
                 return
             }
-            let lines = try await recognizeText(in: cgImage)
+            // Redresse l'étiquette (courbe/inclinée) avant l'OCR pour fiabiliser la lecture.
+            let prepared = await perspectiveCorrected(cgImage)
+            let lines = try await recognizeText(in: prepared)
             recognizedLines = lines
             analyze(lines: lines)
         } catch {
             // En cas d'échec OCR, on conserve l'état courant.
+        }
+    }
+
+    /// Détecte le plus grand rectangle (l'étiquette) et applique une correction
+    /// de perspective (CIPerspectiveCorrection) pour redresser les étiquettes
+    /// courbes/inclinées avant l'OCR. Renvoie l'image d'origine si rien n'est détecté.
+    private func perspectiveCorrected(_ cgImage: CGImage) async -> CGImage {
+        await withCheckedContinuation { continuation in
+            let request = VNDetectRectanglesRequest { request, _ in
+                let rects = request.results as? [VNRectangleObservation] ?? []
+                guard let rect = rects.max(by: {
+                    ($0.boundingBox.width * $0.boundingBox.height) < ($1.boundingBox.width * $1.boundingBox.height)
+                }) else {
+                    continuation.resume(returning: cgImage)
+                    return
+                }
+
+                let ci = CIImage(cgImage: cgImage)
+                let w = ci.extent.width, h = ci.extent.height
+                func denorm(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * w, y: p.y * h) }
+
+                let filter = CIFilter.perspectiveCorrection()
+                filter.inputImage = ci
+                filter.topLeft = denorm(rect.topLeft)
+                filter.topRight = denorm(rect.topRight)
+                filter.bottomLeft = denorm(rect.bottomLeft)
+                filter.bottomRight = denorm(rect.bottomRight)
+
+                let context = CIContext()
+                guard let output = filter.outputImage,
+                      let corrected = context.createCGImage(output, from: output.extent) else {
+                    continuation.resume(returning: cgImage)
+                    return
+                }
+                continuation.resume(returning: corrected)
+            }
+            request.maximumObservations = 1
+            request.minimumConfidence = 0.6
+            request.minimumAspectRatio = 0.2
+            request.minimumSize = 0.2
+
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(returning: cgImage)
+            }
         }
     }
 

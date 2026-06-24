@@ -31,3 +31,6 @@ server/*.db
 
 # Claude Code (interne)
 .claude/
+
+# Info.plist généré par XcodeGen
+CaveOS/Info.plist

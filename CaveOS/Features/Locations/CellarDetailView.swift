@@ -82,7 +82,7 @@ struct CellarDetailView: View {
                     spacing: Theme.Spacing.s
                 ) {
                     ForEach(cells) { location in
-                        LocationCell(location: location, onDrop: handleDrop)
+                        LocationCell(location: location, cellar: cellar, onDrop: handleDrop, onMove: move)
                     }
                 }
             } else {
@@ -135,15 +135,25 @@ struct CellarDetailView: View {
         try? context.save()
         return true
     }
+
+    /// Déplace une bouteille précise vers un emplacement (ou le vrac si nil).
+    private func move(_ bottle: Bottle, to target: Location?) {
+        bottle.location = target
+        bottle.updatedAt = Date()
+        try? context.save()
+    }
 }
 
 // MARK: - Case de grille
 
 private struct LocationCell: View {
     let location: Location
+    let cellar: Cellar
     let onDrop: (String, Location) -> Bool
+    let onMove: (Bottle, Location?) -> Void
 
     @State private var isTargeted = false
+    @State private var showingContents = false
 
     private var count: Int {
         location.bottles.reduce(0) { $0 + $1.quantity }
@@ -175,6 +185,78 @@ private struct LocationCell: View {
             guard let first = items.first else { return false }
             return onDrop(first, location)
         } isTargeted: { isTargeted = $0 }
+        .onTapGesture {
+            if !location.bottles.isEmpty { showingContents = true }
+        }
+        .sheet(isPresented: $showingContents) {
+            LocationContentsSheet(location: location, cellar: cellar, onMove: onMove)
+        }
+    }
+}
+
+// MARK: - Contenu d'une case (déplacement par bouteille)
+
+/// Feuille listant les bouteilles d'un emplacement, chacune déplaçable
+/// vers n'importe quel autre emplacement (ou le vrac). Corrige la limite
+/// du drag&drop en grille qui ne déplaçait que la première bouteille.
+private struct LocationContentsSheet: View {
+    let location: Location
+    let cellar: Cellar
+    let onMove: (Bottle, Location?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var targets: [Location] {
+        cellar.locations
+            .filter { $0.id != location.id }
+            .sorted { ($0.levelIndex, $0.column) < ($1.levelIndex, $1.column) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if location.bottles.isEmpty {
+                    ContentUnavailableView("Emplacement vide", systemImage: "wineglass")
+                } else {
+                    ForEach(location.bottles) { bottle in
+                        bottleRow(bottle)
+                    }
+                }
+            }
+            .navigationTitle(location.label)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fermer") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func bottleRow(_ bottle: Bottle) -> some View {
+        let name = bottle.wine?.name ?? "Bouteille"
+        let title = (bottle.vintage ?? 0) > 0 ? "\(name) \(bottle.vintage!)" : name
+
+        HStack {
+            Image(systemName: "wineglass.fill")
+                .foregroundStyle(bottle.wine?.color.tint ?? Theme.wine)
+            Text(title).lineLimit(1)
+            Spacer()
+            Menu {
+                Button("Vrac (retirer)") { onMove(bottle, nil); dismiss() }
+                Divider()
+                ForEach(targets) { target in
+                    Button("Niv. \(target.levelIndex + 1) · \(target.label)") {
+                        onMove(bottle, target)
+                        dismiss()
+                    }
+                }
+            } label: {
+                Label("Déplacer", systemImage: "arrow.left.arrow.right")
+                    .labelStyle(.iconOnly)
+            }
+        }
     }
 }
 
