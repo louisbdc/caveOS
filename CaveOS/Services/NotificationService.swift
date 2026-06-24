@@ -52,7 +52,7 @@ final class NotificationService {
 
     /// Planifie une alerte à l'entrée d'apogée (1er janvier de l'année `drinkFrom`).
     func scheduleApogeeAlert(for bottle: Bottle) {
-        guard let window = ApogeeEngine.window(for: bottle, now: Date()) else { return }
+        guard let window = ApogeeEngine.window(for: bottle) else { return }
 
         let calendar = Calendar.current
         var components = DateComponents()
@@ -129,7 +129,7 @@ final class NotificationService {
 
     /// Planifie une alerte « à boire vite » ~1 an avant la fin de la fenêtre de garde.
     func scheduleDrinkSoonAlert(for bottle: Bottle) {
-        guard let window = ApogeeEngine.window(for: bottle, now: Date()) else { return }
+        guard let window = ApogeeEngine.window(for: bottle) else { return }
 
         // ~1 an avant la date limite de consommation (1er janvier).
         let calendar = Calendar.current

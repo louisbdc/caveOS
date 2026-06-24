@@ -34,7 +34,10 @@ enum ApogeeEngine {
 
     /// Calcule la fenêtre d'apogée (années absolues) d'une bouteille.
     /// Renvoie `nil` si le millésime est absent ou nul (vin non millésimé).
-    static func window(for bottle: Bottle, now: Date = .now) -> Window? {
+    ///
+    /// La fenêtre est en années absolues (millésime + années ajustées) : elle ne
+    /// dépend donc pas de la date courante, contrairement à `status(for:now:)`.
+    static func window(for bottle: Bottle) -> Window? {
         guard let vintage = bottle.vintage, vintage > 0 else { return nil }
 
         let base = baseProfile(for: bottle)
@@ -51,7 +54,7 @@ enum ApogeeEngine {
 
     /// Détermine le statut d'apogée d'une bouteille à la date donnée.
     static func status(for bottle: Bottle, now: Date = .now) -> ApogeeStatus {
-        guard let window = window(for: bottle, now: now) else { return .unknown }
+        guard let window = window(for: bottle) else { return .unknown }
 
         let year = Calendar.current.component(.year, from: now)
 

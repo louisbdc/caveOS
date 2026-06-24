@@ -50,7 +50,7 @@ enum CSVExporter {
 
     /// Décrit la fenêtre d'apogée d'une bouteille de façon lisible.
     private static func apogeeDescription(for bottle: Bottle) -> String {
-        guard let window = ApogeeEngine.window(for: bottle, now: Date()) else {
+        guard let window = ApogeeEngine.window(for: bottle) else {
             return ""
         }
         return "\(window.drinkFrom)–\(window.drinkBy)"

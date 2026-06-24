@@ -18,7 +18,7 @@ struct BottleDetailView: View {
     }
 
     private var apogeeWindow: ApogeeEngine.Window? {
-        ApogeeEngine.window(for: bottle, now: Date())
+        ApogeeEngine.window(for: bottle)
     }
 
     var body: some View {

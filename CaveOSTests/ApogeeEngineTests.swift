@@ -43,7 +43,7 @@ final class ApogeeEngineTests: XCTestCase {
     func testWindowUsesDefaultProfileWithIdealStorage() {
         // Profil défaut 3/8/15, mid ×1.0, ideal ×1.0 → fenêtre = millésime + 3/8/15.
         let bottle = makeBottle(vintage: 2020, storage: .ideal, tier: .mid)
-        let window = ApogeeEngine.window(for: bottle, now: now())
+        let window = ApogeeEngine.window(for: bottle)
         XCTAssertNotNil(window)
         XCTAssertEqual(window?.drinkFrom, 2023)
         XCTAssertEqual(window?.peak, 2028)
@@ -87,11 +87,11 @@ final class ApogeeEngineTests: XCTestCase {
 
     func testNoVintageReturnsNilAndUnknown() {
         let nilVintage = makeBottle(vintage: nil)
-        XCTAssertNil(ApogeeEngine.window(for: nilVintage, now: now()))
+        XCTAssertNil(ApogeeEngine.window(for: nilVintage))
         XCTAssertEqual(ApogeeEngine.status(for: nilVintage, now: now()), .unknown)
 
         let zeroVintage = makeBottle(vintage: 0)
-        XCTAssertNil(ApogeeEngine.window(for: zeroVintage, now: now()))
+        XCTAssertNil(ApogeeEngine.window(for: zeroVintage))
         XCTAssertEqual(ApogeeEngine.status(for: zeroVintage, now: now()), .unknown)
     }
 
@@ -104,7 +104,7 @@ final class ApogeeEngineTests: XCTestCase {
             vintage: 2020, storage: .poor, tier: .mid,
             baseMin: 5, basePeak: 10, baseMax: 20
         )
-        let window = ApogeeEngine.window(for: bottle, now: now())
+        let window = ApogeeEngine.window(for: bottle)
         XCTAssertEqual(window?.drinkFrom, 2022)
         XCTAssertEqual(window?.peak, 2024)
         XCTAssertEqual(window?.drinkBy, 2028)
@@ -117,7 +117,7 @@ final class ApogeeEngineTests: XCTestCase {
             vintage: 2020, storage: .ideal, tier: .mid,
             baseMin: 5, basePeak: 10, baseMax: 20
         )
-        let idealWindow = ApogeeEngine.window(for: ideal, now: now())
+        let idealWindow = ApogeeEngine.window(for: ideal)
         XCTAssertEqual(idealWindow?.drinkBy, 2040)
         XCTAssertGreaterThan(idealWindow!.drinkBy, window!.drinkBy)
     }
@@ -127,7 +127,7 @@ final class ApogeeEngineTests: XCTestCase {
     func testPremiumTierExtendsWindow() {
         // Profil défaut 3/8/15, premium ×1.4, ideal ×1.0 → 4/11/21 (arrondis).
         let bottle = makeBottle(vintage: 2020, storage: .ideal, tier: .premium)
-        let window = ApogeeEngine.window(for: bottle, now: now())
+        let window = ApogeeEngine.window(for: bottle)
         XCTAssertEqual(window?.drinkFrom, 2024)
         XCTAssertEqual(window?.peak, 2031)
         XCTAssertEqual(window?.drinkBy, 2041)
@@ -145,7 +145,7 @@ final class ApogeeEngineTests: XCTestCase {
         bottle.apogeeMaxOverride = 3
 
         // Override bouteille prioritaire : 1/2/3 depuis 2020.
-        let window = ApogeeEngine.window(for: bottle, now: now())
+        let window = ApogeeEngine.window(for: bottle)
         XCTAssertEqual(window?.drinkFrom, 2021)
         XCTAssertEqual(window?.peak, 2022)
         XCTAssertEqual(window?.drinkBy, 2023)
@@ -162,7 +162,7 @@ final class ApogeeEngineTests: XCTestCase {
         let bottle = Bottle(wine: wine, vintage: 2020)
         bottle.storageQuality = .ideal
 
-        let window = ApogeeEngine.window(for: bottle, now: now())
+        let window = ApogeeEngine.window(for: bottle)
         XCTAssertEqual(window?.drinkFrom, 2023)
         XCTAssertEqual(window?.peak, 2028)
         XCTAssertEqual(window?.drinkBy, 2035)
