@@ -105,6 +105,33 @@ struct DataScannerRepresentable: UIViewControllerRepresentable {
     }
 }
 
+/// Vue affichée lorsque l'accès à la caméra a été refusé : explique et renvoie aux Réglages iOS.
+struct CameraDeniedView: View {
+    var body: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: "camera.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Accès caméra refusé")
+                .font(.headline)
+            Text("CaveOS a besoin de la caméra pour scanner vos étiquettes. Autorisez-la dans les Réglages iOS, ou importez une photo ci-dessous.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Label("Ouvrir les Réglages iOS", systemImage: "gear")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(Theme.Spacing.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// Vue de repli affichée lorsque le scanner en direct n'est pas disponible.
 struct ScannerUnavailableView: View {
     var body: some View {

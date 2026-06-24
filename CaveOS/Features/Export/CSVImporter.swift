@@ -104,6 +104,7 @@ enum CSVImporter {
             throw error
         }
 
+        SnapshotCoordinator.refresh(modelContext: context)
         return imported
     }
 

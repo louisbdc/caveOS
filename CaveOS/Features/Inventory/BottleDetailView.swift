@@ -297,5 +297,6 @@ struct BottleDetailView: View {
         target.updatedAt = Date()
         try? context.save()
         Task { await NotificationService().syncAlerts(for: target) }
+        SnapshotCoordinator.refresh(modelContext: context)
     }
 }

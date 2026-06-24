@@ -4,6 +4,8 @@ import Vision
 import VisionKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import AVFoundation
+import UIKit
 
 /// Vue de scan d'étiquette : capture en direct (VisionKit) ou import photo
 /// (Vision sur image fixe), puis analyse via `LabelParser` et récapitulatif éditable.
@@ -41,6 +43,7 @@ struct ScanView: View {
     @State private var isProcessingPhoto = false
     @State private var showPaywall = false
     @State private var scanFeedback: String?
+    @State private var cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
 
     var body: some View {
         NavigationStack {
@@ -80,16 +83,21 @@ struct ScanView: View {
 
     @ViewBuilder
     private var captureArea: some View {
-        if LiveScannerAvailability.isAvailable {
+        if cameraStatus == .denied || cameraStatus == .restricted {
+            CameraDeniedView()
+        } else if LiveScannerAvailability.isAvailable {
             DataScannerRepresentable(
                 onRecognizedText: { lines in
                     recognizedLines = lines
                 },
                 onRecognizedBarcode: { payload in
-                    scannedEAN = payload
+                    if let ean = Self.validEAN(payload) {
+                        scannedEAN = ean
+                    }
                 }
             )
             .ignoresSafeArea(edges: .horizontal)
+            .task { await ensureCameraAccess() }
         } else {
             ScannerUnavailableView()
         }
@@ -218,6 +226,22 @@ struct ScanView: View {
         }
         .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Permission caméra
+
+    /// Demande l'autorisation caméra si nécessaire et met à jour l'état affiché.
+    private func ensureCameraAccess() async {
+        guard cameraStatus == .notDetermined else { return }
+        _ = await AVCaptureDevice.requestAccess(for: .video)
+        cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    }
+
+    /// Valide un code-barres : seul un EAN/UPC (8 à 13 chiffres) est conservé.
+    static func validEAN(_ payload: String) -> String? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (8...13).contains(trimmed.count), trimmed.allSatisfy(\.isNumber) else { return nil }
+        return trimmed
     }
 
     // MARK: - Données de référence

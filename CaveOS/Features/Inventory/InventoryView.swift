@@ -231,6 +231,7 @@ struct InventoryView: View {
             context.delete(bottle)
         }
         try? context.save()
+        SnapshotCoordinator.refresh(modelContext: context)
     }
 
     /// Crée une bouteille pré-remplie depuis un scan puis ouvre l'éditeur dessus.
@@ -252,6 +253,7 @@ struct InventoryView: View {
         }
         context.insert(bottle)
         try? context.save()
+        SnapshotCoordinator.refresh(modelContext: context)
 
         prefilledBottle = bottle
     }

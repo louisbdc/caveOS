@@ -100,7 +100,7 @@ struct BottleEditView: View {
     }
 
     private var isValid: Bool {
-        !wineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !wineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && eanIsValid
     }
 
     var body: some View {
@@ -292,12 +292,23 @@ struct BottleEditView: View {
         }
     }
 
+    private var eanIsValid: Bool {
+        let trimmed = ean.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        return (8...13).contains(trimmed.count) && trimmed.allSatisfy(\.isNumber)
+    }
+
     private var barcodeSection: some View {
         Section {
             TextField("EAN", text: $ean)
-                .keyboardType(.numbersAndPunctuation)
+                .keyboardType(.numberPad)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+            if !eanIsValid {
+                Label("Un code EAN valide comporte 8 à 13 chiffres.", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(Theme.wine)
+            }
         } header: {
             Text("Code-barres")
         } footer: {
@@ -515,6 +526,7 @@ struct BottleEditView: View {
         try? context.save()
 
         Task { await NotificationService().syncAlerts(for: bottle) }
+        SnapshotCoordinator.refresh(modelContext: context)
 
         dismiss()
     }
