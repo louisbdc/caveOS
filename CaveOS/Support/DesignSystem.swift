@@ -1,6 +1,22 @@
 import SwiftUI
 import UIKit
 
+extension Color {
+    /// Construit une couleur adaptative clair/sombre à partir de composantes RGB (0–1).
+    ///
+    /// Indispensable pour le contraste WCAG : une teinte de badge doit être sombre
+    /// sur le fond crème (mode clair) et claire sur le fond ardoise (mode sombre).
+    static func adaptive(
+        light: (Double, Double, Double),
+        dark: (Double, Double, Double)
+    ) -> Color {
+        Color(uiColor: UIColor { traits in
+            let c = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+    }
+}
+
 /// Jeton de design CaveOS — esthétique « cave premium » (bordeaux profond, or, ardoise).
 enum Theme {
     /// Construit une couleur adaptative clair/sombre.
@@ -17,6 +33,8 @@ enum Theme {
     static let wineDark = adaptive(light: (0.28, 0.05, 0.09), dark: (0.55, 0.14, 0.21))
     /// Or premium, légèrement éclairci en sombre pour un meilleur contraste.
     static let gold = adaptive(light: (0.78, 0.62, 0.30), dark: (0.88, 0.72, 0.42))
+    /// Ambre d'avertissement adaptatif (badge « Entamée », jauge d'emplacement plein) — lisible comme texte dans les deux thèmes.
+    static let amber = Color.adaptive(light: (0.48, 0.29, 0.02), dark: (0.98, 0.72, 0.34))
     /// Crème de marque (fond onboarding, textes sur bordeaux) — constante, indépendante du thème.
     static let cream = Color(red: 0.96, green: 0.94, blue: 0.89)
     /// Bordeaux profonds *constants* (non adaptatifs), réservés aux fonds toujours sombres (onboarding).

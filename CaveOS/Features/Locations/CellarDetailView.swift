@@ -206,7 +206,7 @@ private struct LocationCell: View {
                 .foregroundStyle(count > 0 ? Theme.wine : Color.secondary.opacity(0.3))
             Text("\(count)/\(location.capacity)")
                 .font(.caption.bold())
-                .foregroundStyle(isFull ? Color(red: 0.85, green: 0.55, blue: 0.20) : .primary)
+                .foregroundStyle(isFull ? Theme.amber : .primary)
         }
         .frame(maxWidth: .infinity, minHeight: 64)
         .background(

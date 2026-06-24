@@ -17,15 +17,24 @@ enum WineColor: String, CaseIterable, Codable, Identifiable, Sendable {
         }
     }
 
+    /// Teinte adaptative (sombre en mode clair, claire en mode sombre) pour viser
+    /// un contraste WCAG AA, tout en gardant l'identité de chaque couleur de vin.
     var tint: Color {
         switch self {
-        case .red: return Color(red: 0.45, green: 0.07, blue: 0.13)
-        case .white: return Color(red: 0.85, green: 0.78, blue: 0.45)
-        case .rose: return Color(red: 0.92, green: 0.55, blue: 0.60)
-        case .sparkling: return Color(red: 0.90, green: 0.80, blue: 0.55)
-        case .sweet: return Color(red: 0.80, green: 0.60, blue: 0.20)
-        case .fortified: return Color(red: 0.40, green: 0.20, blue: 0.18)
-        case .orange: return Color(red: 0.85, green: 0.50, blue: 0.20)
+        case .red:
+            return .adaptive(light: (0.45, 0.07, 0.13), dark: (0.95, 0.45, 0.50))
+        case .white:
+            return .adaptive(light: (0.42, 0.33, 0.05), dark: (0.92, 0.83, 0.48))
+        case .rose:
+            return .adaptive(light: (0.62, 0.18, 0.28), dark: (0.97, 0.64, 0.70))
+        case .sparkling:
+            return .adaptive(light: (0.44, 0.34, 0.06), dark: (0.95, 0.85, 0.55))
+        case .sweet:
+            return .adaptive(light: (0.46, 0.31, 0.03), dark: (0.93, 0.74, 0.34))
+        case .fortified:
+            return .adaptive(light: (0.40, 0.20, 0.18), dark: (0.85, 0.52, 0.46))
+        case .orange:
+            return .adaptive(light: (0.54, 0.27, 0.04), dark: (0.97, 0.63, 0.33))
         }
     }
 }
@@ -211,14 +220,22 @@ enum ApogeeStatus: String, CaseIterable, Codable, Identifiable, Sendable {
         case .unknown: return "Inconnu"
         }
     }
+    /// Teinte adaptative (sombre en mode clair, claire en mode sombre) pour viser
+    /// un contraste WCAG AA dans les deux thèmes.
     var tint: Color {
         switch self {
-        case .tooYoung: return Color(red: 0.30, green: 0.55, blue: 0.85)
-        case .ready: return Color(red: 0.30, green: 0.70, blue: 0.45)
-        case .peak: return Color(red: 0.20, green: 0.60, blue: 0.30)
-        case .drinkSoon: return Color(red: 0.90, green: 0.65, blue: 0.20)
-        case .past: return Color(red: 0.70, green: 0.25, blue: 0.20)
-        case .unknown: return Color.gray
+        case .tooYoung:
+            return .adaptive(light: (0.12, 0.32, 0.72), dark: (0.55, 0.74, 1.00))
+        case .ready:
+            return .adaptive(light: (0.12, 0.34, 0.18), dark: (0.52, 0.86, 0.64))
+        case .peak:
+            return .adaptive(light: (0.06, 0.36, 0.24), dark: (0.46, 0.88, 0.55))
+        case .drinkSoon:
+            return .adaptive(light: (0.48, 0.29, 0.02), dark: (0.98, 0.72, 0.32))
+        case .past:
+            return .adaptive(light: (0.62, 0.16, 0.12), dark: (0.95, 0.50, 0.43))
+        case .unknown:
+            return .adaptive(light: (0.34, 0.34, 0.36), dark: (0.70, 0.70, 0.74))
         }
     }
     var symbol: String {

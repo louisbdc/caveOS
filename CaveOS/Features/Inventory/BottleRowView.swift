@@ -105,7 +105,7 @@ struct BottleRowView: View {
     /// Couleur du badge d'état : ambre pour entamée, neutre pour consommée.
     private var stateTint: Color {
         switch bottle.state {
-        case .opened: return Color(red: 0.85, green: 0.55, blue: 0.20)
+        case .opened: return Theme.amber
         case .consumed: return Theme.slate
         case .inCellar: return Theme.slate
         }
