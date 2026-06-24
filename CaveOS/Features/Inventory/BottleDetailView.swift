@@ -112,6 +112,7 @@ struct BottleDetailView: View {
         Section("Apogée") {
             HStack {
                 Image(systemName: apogeeStatus.symbol)
+                    .accessibilityHidden(true)
                 Text(apogeeStatus.label)
                 Spacer()
             }

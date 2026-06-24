@@ -231,6 +231,7 @@ struct StatsView: View {
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
     }
 

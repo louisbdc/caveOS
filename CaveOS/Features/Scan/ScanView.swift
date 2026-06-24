@@ -210,6 +210,7 @@ struct ScanView: View {
             Image(systemName: "lock.fill")
                 .font(.largeTitle)
                 .foregroundStyle(Theme.gold)
+                .accessibilityHidden(true)
             Text("Scans épuisés")
                 .font(.headline)
             Text("Vous avez utilisé tous vos scans gratuits. Passez à CaveOS Pro pour scanner sans limite.")

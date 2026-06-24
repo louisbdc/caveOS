@@ -101,7 +101,11 @@ struct StatusBadge: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if let systemImage { Image(systemName: systemImage) }
+            // Icône décorative : le libellé texte porte déjà l'information pour VoiceOver.
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .accessibilityHidden(true)
+            }
             Text(text)
         }
         .font(.caption.weight(.semibold))

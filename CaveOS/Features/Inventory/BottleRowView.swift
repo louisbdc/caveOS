@@ -81,6 +81,25 @@ struct BottleRowView: View {
         }
         .padding(.vertical, Theme.Spacing.xs)
         .opacity(bottle.state == .consumed ? 0.5 : 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    /// Description VoiceOver complète : la ligne est lue d'un seul tenant
+    /// (au lieu de forcer l'utilisateur à parcourir chaque badge séparément).
+    private var accessibilityDescription: String {
+        [
+            wineName,
+            producerName,
+            "millésime \(vintageText)",
+            bottle.format.label,
+            bottle.wine?.color.label,
+            "apogée : \(apogeeStatus.label)",
+            bottle.state == .inCellar ? nil : bottle.state.label,
+            "quantité \(bottle.quantity)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
     }
 
     /// Couleur du badge d'état : ambre pour entamée, neutre pour consommée.

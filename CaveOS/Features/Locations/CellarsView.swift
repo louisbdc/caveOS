@@ -71,6 +71,7 @@ private struct CellarRow: View {
                 .font(.title2)
                 .foregroundStyle(Theme.wine)
                 .frame(width: 36)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(cellar.name)

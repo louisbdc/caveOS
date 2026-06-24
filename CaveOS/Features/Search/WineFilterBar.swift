@@ -315,10 +315,14 @@ struct FilterChip: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if let systemImage { Image(systemName: systemImage) }
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .accessibilityHidden(true)
+            }
             Text(title)
             Image(systemName: "chevron.down")
                 .font(.caption2)
+                .accessibilityHidden(true)
         }
         .font(.caption.weight(.semibold))
         .padding(.horizontal, Theme.Spacing.s)
