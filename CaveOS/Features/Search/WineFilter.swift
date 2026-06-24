@@ -6,6 +6,7 @@ struct WineFilter: Equatable {
     var text: String = ""
     var colors: Set<WineColor> = []
     var statuses: Set<ApogeeStatus> = []
+    var states: Set<BottleState> = []
     var minPrice: Double? = nil
     var maxPrice: Double? = nil
     var regionName: String? = nil
@@ -20,6 +21,7 @@ struct WineFilter: Equatable {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && colors.isEmpty
             && statuses.isEmpty
+            && states.isEmpty
             && minPrice == nil
             && maxPrice == nil
             && regionName == nil
@@ -35,6 +37,7 @@ struct WineFilter: Equatable {
         matchesText(bottle)
             && matchesColor(bottle)
             && matchesStatus(bottle, now: now)
+            && matchesState(bottle)
             && matchesPrice(bottle)
             && matchesRegion(bottle)
             && matchesGrape(bottle)
@@ -68,6 +71,13 @@ struct WineFilter: Equatable {
     private func matchesStatus(_ bottle: Bottle, now: Date) -> Bool {
         guard !statuses.isEmpty else { return true }
         return statuses.contains(ApogeeEngine.status(for: bottle, now: now))
+    }
+
+    /// Par défaut (aucun état sélectionné), on masque les bouteilles consommées ;
+    /// sinon on applique exactement la sélection.
+    private func matchesState(_ bottle: Bottle) -> Bool {
+        guard !states.isEmpty else { return bottle.state != .consumed }
+        return states.contains(bottle.state)
     }
 
     private func matchesPrice(_ bottle: Bottle) -> Bool {

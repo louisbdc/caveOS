@@ -17,6 +17,7 @@ struct WineFilterBar: View {
             HStack(spacing: Theme.Spacing.s) {
                 colorMenu
                 statusMenu
+                stateMenu
                 regionMenu
                 appellationMenu
                 grapeMenu
@@ -83,6 +84,28 @@ struct WineFilterBar: View {
                 title: filter.statuses.isEmpty ? "Apogée" : "Apogée (\(filter.statuses.count))",
                 isActive: !filter.statuses.isEmpty,
                 systemImage: "clock.fill"
+            )
+        }
+    }
+
+    private var stateMenu: some View {
+        Menu {
+            ForEach(BottleState.allCases) { state in
+                Button {
+                    filter.states.toggle(state)
+                } label: {
+                    Label(state.label, systemImage: filter.states.contains(state) ? "checkmark" : state.symbol)
+                }
+            }
+            if !filter.states.isEmpty {
+                Divider()
+                Button("Effacer", role: .destructive) { filter.states = [] }
+            }
+        } label: {
+            FilterChip(
+                title: filter.states.isEmpty ? "État" : "État (\(filter.states.count))",
+                isActive: !filter.states.isEmpty,
+                systemImage: "shippingbox"
             )
         }
     }

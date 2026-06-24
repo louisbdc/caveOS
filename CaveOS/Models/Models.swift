@@ -149,6 +149,7 @@ final class Bottle {
 
     var stateRaw: String = BottleState.inCellar.rawValue
     var openedDate: Date?
+    var consumedDate: Date?
     var remainingServings: Int?
     var conservationRaw: String?
 

@@ -466,6 +466,7 @@ struct BottleEditView: View {
             bottle.remainingServings = nil
             bottle.conservation = .none
         }
+        bottle.consumedDate = (state == .consumed) ? (bottle.consumedDate ?? Date()) : nil
         bottle.updatedAt = Date()
 
         try? context.save()

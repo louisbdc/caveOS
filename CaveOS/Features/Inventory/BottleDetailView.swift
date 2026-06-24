@@ -29,6 +29,11 @@ struct BottleDetailView: View {
             if bottle.state == .opened {
                 openedSection
             }
+            if bottle.state == .consumed, let date = bottle.consumedDate {
+                Section("Bouteille consommée") {
+                    labelRow("Consommée le", date.formatted(date: .abbreviated, time: .omitted))
+                }
+            }
             tastingSection
             actionsSection
         }
@@ -158,21 +163,45 @@ struct BottleDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var actionsSection: some View {
-        Section("Actions") {
-            if bottle.state != .opened {
+        Section {
+            switch bottle.state {
+            case .inCellar:
                 Button {
-                    markOpened()
+                    drinkOne()
                 } label: {
-                    Label("Marquer entamée", systemImage: "wineglass")
+                    Label(bottle.quantity > 1 ? "J'en bois une (reste \(bottle.quantity - 1))" : "J'en bois une",
+                          systemImage: "minus.circle")
                 }
-            }
-            if bottle.state != .consumed {
-                Button(role: .destructive) {
+                Button {
+                    openOne()
+                } label: {
+                    Label("Marquer une bouteille entamée", systemImage: "wineglass")
+                }
+            case .opened:
+                Button {
                     markConsumed()
                 } label: {
                     Label("Marquer consommée", systemImage: "checkmark.circle")
                 }
+                Button {
+                    restoreToCellar()
+                } label: {
+                    Label("Remettre en cave", systemImage: "arrow.uturn.backward")
+                }
+            case .consumed:
+                Button {
+                    restoreToCellar()
+                } label: {
+                    Label("Remettre en cave", systemImage: "arrow.uturn.backward")
+                }
+            }
+        } header: {
+            Text("Actions")
+        } footer: {
+            if bottle.state == .inCellar && bottle.quantity > 1 {
+                Text("« Entamée » ouvre une seule bouteille du lot ; les autres restent en cave.")
             }
         }
     }
@@ -196,16 +225,77 @@ struct BottleDetailView: View {
         return (try? context.fetch(descriptor)) ?? []
     }
 
-    private func markOpened() {
-        bottle.state = .opened
-        bottle.openedDate = Date()
-        bottle.updatedAt = Date()
-        try? context.save()
+    /// Consomme une unité du lot : décrémente la quantité, ou marque consommée
+    /// quand il ne restait qu'une bouteille.
+    private func drinkOne() {
+        if bottle.quantity > 1 {
+            bottle.quantity -= 1
+        } else {
+            bottle.state = .consumed
+            bottle.consumedDate = Date()
+            bottle.remainingServings = nil
+        }
+        persist(bottle)
+    }
+
+    /// Ouvre une seule bouteille du lot. Si plusieurs exemplaires, on en détache un
+    /// dans une nouvelle entrée « entamée » ; sinon on bascule l'entrée existante.
+    private func openOne() {
+        if bottle.quantity > 1 {
+            bottle.quantity -= 1
+            let opened = openedCopy(of: bottle)
+            context.insert(opened)
+            persist(bottle)
+            persist(opened)
+        } else {
+            bottle.state = .opened
+            bottle.openedDate = Date()
+            persist(bottle)
+        }
     }
 
     private func markConsumed() {
         bottle.state = .consumed
-        bottle.updatedAt = Date()
+        bottle.consumedDate = Date()
+        bottle.remainingServings = nil
+        persist(bottle)
+    }
+
+    /// Annule l'état entamée/consommée et remet la bouteille en cave.
+    private func restoreToCellar() {
+        bottle.state = .inCellar
+        bottle.openedDate = nil
+        bottle.consumedDate = nil
+        bottle.remainingServings = nil
+        bottle.conservation = .none
+        persist(bottle)
+    }
+
+    /// Crée une copie « entamée » (1 exemplaire) reprenant les attributs du lot.
+    private func openedCopy(of source: Bottle) -> Bottle {
+        let copy = Bottle(
+            wine: source.wine,
+            vintage: source.vintage,
+            format: source.format,
+            quantity: 1,
+            location: source.location,
+            state: .opened
+        )
+        copy.openedDate = Date()
+        copy.storageQuality = source.storageQuality
+        copy.apogeeMinOverride = source.apogeeMinOverride
+        copy.apogeePeakOverride = source.apogeePeakOverride
+        copy.apogeeMaxOverride = source.apogeeMaxOverride
+        copy.isLyingDown = source.isLyingDown
+        copy.purchasePrice = source.purchasePrice
+        copy.purchaseDate = source.purchaseDate
+        copy.supplier = source.supplier
+        return copy
+    }
+
+    private func persist(_ target: Bottle) {
+        target.updatedAt = Date()
         try? context.save()
+        Task { await NotificationService().syncAlerts(for: target) }
     }
 }

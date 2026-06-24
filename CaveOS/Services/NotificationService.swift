@@ -182,6 +182,9 @@ final class NotificationService {
         // Évite les doublons en repartant d'un état propre.
         cancelAll(for: bottle)
 
+        // Une bouteille consommée n'a plus d'alerte à recevoir.
+        guard bottle.state != .consumed else { return }
+
         scheduleApogeeAlert(for: bottle)
         scheduleDrinkSoonAlert(for: bottle)
 
