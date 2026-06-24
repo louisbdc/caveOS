@@ -53,10 +53,14 @@ struct CaveOSApp: App {
         let snapshot = WidgetSnapshotStore.read()
         let items: [[String: String]] = snapshot.priorityItems.prefix(5).map { item in
             let vintageText: String = item.vintage.map(String.init) ?? ""
+            // La Watch lit la clé "subtitle" : on y combine millésime et statut d'apogée.
+            let subtitle = vintageText.isEmpty
+                ? item.statusLabel
+                : "\(vintageText) · \(item.statusLabel)"
             return [
                 "name": item.wineName,
                 "vintage": vintageText,
-                "status": item.statusLabel
+                "subtitle": subtitle
             ]
         }
         PhoneWatchSync.push(total: snapshot.totalBottles, ready: snapshot.readyToDrink, items: Array(items))

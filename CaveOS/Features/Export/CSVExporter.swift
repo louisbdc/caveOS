@@ -59,6 +59,7 @@ enum CSVExporter {
     /// Échappe un champ CSV : entoure de guillemets si nécessaire, double les guillemets internes.
     private static func escape(_ field: String) -> String {
         let needsQuoting = field.contains(",")
+            || field.contains(";")
             || field.contains("\"")
             || field.contains("\n")
             || field.contains("\r")

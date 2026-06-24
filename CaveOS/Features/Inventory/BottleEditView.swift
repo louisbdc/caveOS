@@ -244,16 +244,16 @@ struct BottleEditView: View {
 
     private var apogeeOverrideSection: some View {
         Section {
-            TextField("Début (année)", text: $apogeeMinText)
+            TextField("Début de garde (ans)", text: $apogeeMinText)
                 .keyboardType(.numberPad)
-            TextField("Pic (année)", text: $apogeePeakText)
+            TextField("Apogée (ans)", text: $apogeePeakText)
                 .keyboardType(.numberPad)
-            TextField("Fin (année)", text: $apogeeMaxText)
+            TextField("Fin de garde (ans)", text: $apogeeMaxText)
                 .keyboardType(.numberPad)
         } header: {
             Text("Apogée (override manuel)")
         } footer: {
-            Text("Années absolues (ex. 2018, 2024, 2032). Laissez vide pour utiliser le calcul automatique basé sur le cépage, la région et la qualité de stockage.")
+            Text("Nombre d'années de garde après le millésime (ex. 3 / 8 / 15 = prêt à 3 ans, apogée à 8, à boire avant 15). Renseignez les trois pour remplacer le calcul automatique ; laissez vide sinon.")
         }
     }
 

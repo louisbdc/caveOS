@@ -160,6 +160,10 @@ final class Bottle {
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
+    // Supprime les notes de dégustation rattachées quand la bouteille est supprimée.
+    @Relationship(deleteRule: .cascade, inverse: \TastingNote.bottle)
+    var tastingNotes: [TastingNote] = []
+
     var format: BottleFormat {
         get { BottleFormat(rawValue: formatRaw) ?? .bottle }
         set { formatRaw = newValue.rawValue }

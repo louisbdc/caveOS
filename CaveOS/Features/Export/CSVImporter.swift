@@ -74,7 +74,10 @@ enum CSVImporter {
             throw ImportError.unreadableFile
         }
 
-        let rows = parse(raw)
+        // Détecte le séparateur (',' ou ';') depuis l'en-tête pour éviter de couper
+        // un champ qui contiendrait l'autre caractère.
+        let delimiter = detectDelimiter(raw)
+        let rows = parse(raw, delimiter: delimiter)
         guard let header = rows.first, rows.count > 1 else {
             throw ImportError.emptyFile
         }
@@ -84,9 +87,12 @@ enum CSVImporter {
             throw ImportError.missingNameColumn
         }
 
+        // Cache des entités existantes pour éviter les doublons à l'import.
+        let cache = ImportCache(context: context)
+
         var imported = 0
         for fields in rows.dropFirst() where !isBlank(fields) {
-            if insertBottle(from: fields, mapping: mapping, into: context) {
+            if insertBottle(from: fields, mapping: mapping, cache: cache, into: context) {
                 imported += 1
             }
         }
@@ -103,10 +109,13 @@ enum CSVImporter {
 
     // MARK: - Construction des entités
 
-    /// Crée Wine + Producer + Bottle pour une ligne. Retourne `false` si la ligne est ignorée.
+    /// Crée Wine + Bottle pour une ligne, en réutilisant les entités existantes
+    /// (producteur, région, appellation, cépages, emplacement). Retourne `false`
+    /// si la ligne est ignorée.
     @MainActor
     private static func insertBottle(from fields: [String],
                                      mapping: [Field: Int],
+                                     cache: ImportCache,
                                      into context: ModelContext) -> Bool {
         let name = value(.name, in: fields, mapping: mapping)
         guard let name, !name.isEmpty else { return false }
@@ -118,34 +127,30 @@ enum CSVImporter {
         }
 
         if let producerName = value(.producer, in: fields, mapping: mapping), !producerName.isEmpty {
-            let producer = Producer(name: producerName)
-            context.insert(producer)
-            wine.producer = producer
+            wine.producer = cache.producer(named: producerName)
         }
 
         if let regionName = value(.region, in: fields, mapping: mapping), !regionName.isEmpty {
-            let region = Region(name: regionName)
-            context.insert(region)
-            wine.region = region
+            wine.region = cache.region(named: regionName)
         }
 
         if let appellationName = value(.appellation, in: fields, mapping: mapping), !appellationName.isEmpty {
-            let appellation = Appellation(name: appellationName)
-            context.insert(appellation)
-            wine.appellation = appellation
+            wine.appellation = cache.appellation(named: appellationName)
         }
 
         if let grapesText = value(.grapes, in: fields, mapping: mapping), !grapesText.isEmpty {
-            wine.grapes = parseGrapes(grapesText).map { grapeName in
-                let grape = Grape(name: grapeName)
-                context.insert(grape)
-                return grape
-            }
+            wine.grapes = parseGrapes(grapesText).map { cache.grape(named: $0) }
         }
 
         context.insert(wine)
 
         let bottle = Bottle(wine: wine)
+
+        // Relie un emplacement existant si son libellé correspond (round-trip CaveOS).
+        if let locationLabel = value(.location, in: fields, mapping: mapping),
+           let location = cache.location(labeled: locationLabel) {
+            bottle.location = location
+        }
 
         if let vintageText = value(.vintage, in: fields, mapping: mapping) {
             bottle.vintage = parseVintage(vintageText)
@@ -280,11 +285,21 @@ enum CSVImporter {
         fields.allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
+    // MARK: - Détection du séparateur
+
+    /// Détecte le séparateur (',' ou ';') d'après la première ligne (en-tête).
+    private static func detectDelimiter(_ text: String) -> Character {
+        let firstLine = text.prefix { $0 != "\n" && $0 != "\r" }
+        let commas = firstLine.filter { $0 == "," }.count
+        let semicolons = firstLine.filter { $0 == ";" }.count
+        return semicolons > commas ? ";" : ","
+    }
+
     // MARK: - Parseur CSV
 
-    /// Parse un texte CSV en lignes de champs, en gérant guillemets, virgules
-    /// internes, guillemets doublés et retours à la ligne (CRLF / LF) échappés.
-    private static func parse(_ text: String) -> [[String]] {
+    /// Parse un texte CSV en lignes de champs, en gérant guillemets, séparateur
+    /// interne, guillemets doublés et retours à la ligne (CRLF / LF) échappés.
+    private static func parse(_ text: String, delimiter: Character = ",") -> [[String]] {
         var rows: [[String]] = []
         var currentRow: [String] = []
         var field = ""
@@ -309,20 +324,19 @@ enum CSVImporter {
                     field.append(character)
                 }
             } else {
-                switch character {
-                case "\"":
+                if character == "\"" {
                     insideQuotes = true
-                case ",", ";":
+                } else if character == delimiter {
                     currentRow.append(field)
                     field = ""
-                case "\n":
+                } else if character == "\n" {
                     currentRow.append(field)
                     rows.append(currentRow)
                     currentRow = []
                     field = ""
-                case "\r":
-                    break
-                default:
+                } else if character == "\r" {
+                    // Ignoré (CRLF)
+                } else {
                     field.append(character)
                 }
             }
@@ -335,5 +349,73 @@ enum CSVImporter {
         }
 
         return rows
+    }
+}
+
+// MARK: - Cache de déduplication à l'import
+
+/// Réutilise les entités de référence existantes (producteur, région, appellation,
+/// cépage, emplacement) au lieu d'en créer une nouvelle à chaque ligne importée.
+@MainActor
+private final class ImportCache {
+    private let context: ModelContext
+    private var producers: [String: Producer]
+    private var regions: [String: Region]
+    private var appellations: [String: Appellation]
+    private var grapes: [String: Grape]
+    private var locations: [String: Location]
+
+    init(context: ModelContext) {
+        self.context = context
+        func index<T: PersistentModel>(_ key: (T) -> String) -> [String: T] {
+            let items = (try? context.fetch(FetchDescriptor<T>())) ?? []
+            return Dictionary(items.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
+        }
+        producers = index { (p: Producer) in p.name.foldedForMatch }
+        regions = index { (r: Region) in r.name.foldedForMatch }
+        appellations = index { (a: Appellation) in a.name.foldedForMatch }
+        grapes = index { (g: Grape) in g.name.foldedForMatch }
+        locations = index { (l: Location) in l.label.foldedForMatch }
+    }
+
+    func producer(named name: String) -> Producer {
+        let key = name.foldedForMatch
+        if let existing = producers[key] { return existing }
+        let created = Producer(name: name)
+        context.insert(created)
+        producers[key] = created
+        return created
+    }
+
+    func region(named name: String) -> Region {
+        let key = name.foldedForMatch
+        if let existing = regions[key] { return existing }
+        let created = Region(name: name)
+        context.insert(created)
+        regions[key] = created
+        return created
+    }
+
+    func appellation(named name: String) -> Appellation {
+        let key = name.foldedForMatch
+        if let existing = appellations[key] { return existing }
+        let created = Appellation(name: name)
+        context.insert(created)
+        appellations[key] = created
+        return created
+    }
+
+    func grape(named name: String) -> Grape {
+        let key = name.foldedForMatch
+        if let existing = grapes[key] { return existing }
+        let created = Grape(name: name)
+        context.insert(created)
+        grapes[key] = created
+        return created
+    }
+
+    /// Ne relie qu'un emplacement *existant* (on ne fabrique pas de cave à l'import).
+    func location(labeled label: String) -> Location? {
+        locations[label.foldedForMatch]
     }
 }

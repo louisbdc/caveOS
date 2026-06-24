@@ -40,6 +40,7 @@ struct ScanView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var isProcessingPhoto = false
     @State private var showPaywall = false
+    @State private var scanFeedback: String?
 
     var body: some View {
         NavigationStack {
@@ -116,6 +117,13 @@ struct ScanView: View {
 
             if isProcessingPhoto {
                 ProgressView("Analyse de la photo…")
+            }
+
+            if let scanFeedback {
+                Label(scanFeedback, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if hasAnalyzed {
@@ -230,6 +238,17 @@ struct ScanView: View {
         )
         applyToFields(label)
         hasAnalyzed = true
+
+        // Feedback explicite si rien d'exploitable n'a été reconnu.
+        let nothingDetected = (label.wineName ?? "").isEmpty
+            && (label.producer ?? "").isEmpty
+            && label.vintage == nil
+            && (label.appellation ?? "").isEmpty
+            && label.grapes.isEmpty
+            && (scannedEAN ?? "").isEmpty
+        scanFeedback = nothingDetected
+            ? "Aucune information détectée. Rapprochez l'étiquette, améliorez l'éclairage et réessayez — ou complétez les champs à la main."
+            : nil
     }
 
     private func applyToFields(_ label: ScannedLabel) {
@@ -272,6 +291,7 @@ struct ScanView: View {
             guard let data = try await item.loadTransferable(type: Data.self),
                   let uiImage = UIImage(data: data),
                   let cgImage = uiImage.cgImage else {
+                scanFeedback = "Impossible de charger cette image. Réessayez avec une autre photo."
                 return
             }
             // Redresse l'étiquette (courbe/inclinée) avant l'OCR pour fiabiliser la lecture.
@@ -280,7 +300,7 @@ struct ScanView: View {
             recognizedLines = lines
             analyze(lines: lines)
         } catch {
-            // En cas d'échec OCR, on conserve l'état courant.
+            scanFeedback = "L'analyse de la photo a échoué. Réessayez avec une image plus nette."
         }
     }
 
