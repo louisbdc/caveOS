@@ -30,6 +30,7 @@ targets:
       path: CaveOS/Info.plist
       properties:
         CFBundleDisplayName: CaveOS
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -97,6 +98,9 @@ schemes:
         CaveOS: all
         CaveOSWidget: all
         CaveOSTests: [test]
+    run:
+      # Permet de tester les achats StoreKit en simulateur sans App Store Connect.
+      storeKitConfiguration: Configuration/Products.storekit
     test:
       targets:
         - CaveOSTests

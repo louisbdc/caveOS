@@ -5,7 +5,7 @@
   ],
   "products" : [
     {
-      "displayPrice" : "9.99",
+      "displayPrice" : "50.00",
       "familyShareable" : false,
       "internalID" : "CAVEOS-LIFETIME-0001",
       "localizations" : [
@@ -99,7 +99,7 @@
           "codeOffers" : [
 
           ],
-          "displayPrice" : "4.99",
+          "displayPrice" : "30.00",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "CAVEOS-YEARLY-0001",

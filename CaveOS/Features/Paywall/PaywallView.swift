@@ -9,10 +9,7 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var isPurchasing = false
-    @State private var checkout: IdentifiableURL?
-    @State private var billingError: String?
     @State private var purchaseSucceeded = false
-    @State private var isVerifying = false
 
     var body: some View {
         NavigationStack {
@@ -43,15 +40,9 @@ struct PaywallView: View {
                 }
             }
             .overlay {
-                if isVerifying {
-                    verificationOverlay
-                }
                 if purchaseSucceeded {
                     successOverlay
                 }
-            }
-            .sheet(item: $checkout, onDismiss: { Task { await pollAfterCheckout() } }) { item in
-                SafariView(url: item.url)
             }
         }
     }
@@ -150,7 +141,7 @@ struct PaywallView: View {
     private var actions: some View {
         VStack(spacing: Theme.Spacing.m) {
             Button {
-                Task { await startStripe(kind: "lifetime") }
+                Task { await buy { try await store.purchaseLifetime() } }
             } label: {
                 purchaseLabel(title: "Débloquer à vie", subtitle: lifetimePrice)
             }
@@ -159,7 +150,7 @@ struct PaywallView: View {
             .disabled(isPurchasing)
 
             Button {
-                Task { await startStripe(kind: "subscription") }
+                Task { await buy { try await store.purchaseSubscription() } }
             } label: {
                 purchaseLabel(title: "Abonnement annuel", subtitle: subscriptionPrice)
             }
@@ -171,9 +162,6 @@ struct PaywallView: View {
                 Task {
                     isPurchasing = true
                     await store.restore()
-                    if let active = await BillingService.status() {
-                        store.setWebSubscription(active: active)
-                    }
                     isPurchasing = false
                     if store.isPro { await celebrateAndDismiss() }
                 }
@@ -185,42 +173,18 @@ struct PaywallView: View {
                 ProgressView()
                     .padding(.top, Theme.Spacing.xs)
             }
-
-            if let billingError {
-                Text(billingError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
         }
     }
 
-    // MARK: - Paiement via Stripe
+    // MARK: - Achat via StoreKit
 
-    private func startStripe(kind: String) async {
+    /// Lance un achat StoreKit puis ferme l'écran si l'utilisateur est devenu Pro.
+    /// Les erreurs éventuelles sont exposées à l'utilisateur via `store.purchaseError`.
+    private func buy(_ purchase: () async throws -> Void) async {
         isPurchasing = true
-        billingError = nil
         defer { isPurchasing = false }
-        do {
-            let url = try await BillingService.startCheckout(kind: kind)
-            checkout = IdentifiableURL(url: url)
-        } catch {
-            billingError = error.localizedDescription
-        }
-    }
-
-    /// Après le retour du Checkout, le webhook peut tarder un peu : on interroge le statut.
-    private func pollAfterCheckout() async {
-        isVerifying = true
-        defer { isVerifying = false }
-        for _ in 0..<6 {
-            if await BillingService.status() == true {
-                store.setWebSubscription(active: true)
-                await celebrateAndDismiss()
-                return
-            }
-            try? await Task.sleep(for: .seconds(2))
-        }
-        billingError = "Paiement non confirmé pour l'instant. S'il a abouti, le déblocage apparaîtra dans un instant ; sinon réessayez."
+        try? await purchase()
+        if store.isPro { await celebrateAndDismiss() }
     }
 
     /// Affiche brièvement la confirmation de déblocage avant de fermer.
@@ -228,19 +192,6 @@ struct PaywallView: View {
         withAnimation { purchaseSucceeded = true }
         try? await Task.sleep(for: .seconds(1.4))
         dismiss()
-    }
-
-    private var verificationOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.25).ignoresSafeArea()
-            VStack(spacing: Theme.Spacing.s) {
-                ProgressView()
-                Text("Vérification du paiement…")
-                    .font(.subheadline)
-            }
-            .padding(Theme.Spacing.l)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.m))
-        }
     }
 
     private var successOverlay: some View {
@@ -269,12 +220,28 @@ struct PaywallView: View {
     }
 
     private var legal: some View {
-        Text("Sans publicité, sans revente de vos données. L'abonnement se renouvelle automatiquement sauf annulation au moins 24 h avant la fin de la période. L'achat à vie est un paiement unique.")
+        VStack(spacing: Theme.Spacing.s) {
+            Text("Sans publicité, sans revente de vos données. L'abonnement annuel se renouvelle automatiquement sauf annulation au moins 24 h avant la fin de la période, depuis les réglages de votre compte Apple. L'achat à vie est un paiement unique.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            // Liens requis pour les abonnements auto-renouvelables (Guideline 3.1.2).
+            HStack(spacing: Theme.Spacing.m) {
+                Link("Conditions d'utilisation", destination: Self.termsURL)
+                Text("·").foregroundStyle(.secondary)
+                Link("Confidentialité", destination: Self.privacyURL)
+            }
             .font(.caption2)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.top, Theme.Spacing.s)
+            .tint(Theme.wine)
+        }
+        .padding(.top, Theme.Spacing.s)
     }
+
+    /// EULA standard Apple (l'app ne fournit pas ses propres conditions).
+    private static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    /// Politique de confidentialité servie par le serveur CaveOS.
+    private static let privacyURL = URL(string: "https://caveos.152.228.136.49.sslip.io/privacy")!
 
     private func errorBanner(_ message: String) -> some View {
         Text(message)

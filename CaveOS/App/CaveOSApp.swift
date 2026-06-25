@@ -29,14 +29,11 @@ struct CaveOSApp: App {
             ContentView()
                 .environment(store)
                 .task {
+                    // Droits Pro via StoreKit : observation des transactions + chargement
+                    // des produits (prix). L'abonnement passe par l'achat intégré Apple
+                    // (conforme Guideline 3.1.1) ; aucun paiement externe dans l'app.
                     store.startObserving()
                     await store.loadProducts()
-                    // Synchronise l'abonnement web (Stripe) souscrit sur cet appareil.
-                    // On ne met à jour l'état que si le serveur répond clairement :
-                    // hors-ligne (nil), on conserve le dernier état connu.
-                    if let active = await BillingService.status() {
-                        store.setWebSubscription(active: active)
-                    }
                     refreshWidgetSnapshot()
                 }
         }
