@@ -301,7 +301,14 @@ struct ScanView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
 
-        store.consumeFreeScan()
+        // Ne décompte un scan gratuit que si l'analyse a produit au moins un champ
+        // exploitable : une étiquette illisible ne doit pas coûter un scan.
+        let detectedSomething = label.wineName != nil || label.producer != nil
+            || label.ean != nil || label.vintage != nil
+            || label.appellation != nil || !label.grapes.isEmpty
+        if detectedSomething {
+            store.consumeFreeScan()
+        }
         onComplete(label)
         dismiss()
     }

@@ -8,12 +8,17 @@ import Charts
 /// par couleur, région et statut d'apogée. Met en avant les bouteilles
 /// à boire en priorité.
 struct StatsView: View {
+    @Environment(StoreManager.self) private var store
     @Query private var bottles: [Bottle]
+
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
             Group {
-                if activeBottles.isEmpty {
+                if !store.isPro {
+                    proGate
+                } else if activeBottles.isEmpty {
                     ContentUnavailableView(
                         "Aucune bouteille en cave",
                         systemImage: "chart.pie",
@@ -26,7 +31,38 @@ struct StatsView: View {
                 }
             }
             .navigationTitle("Statistiques")
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
         }
+    }
+
+    // MARK: - Accès Pro
+
+    /// Écran de blocage : le tableau de bord analytique est réservé à CaveOS Pro.
+    private var proGate: some View {
+        VStack(spacing: Theme.Spacing.l) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.largeTitle)
+                .foregroundStyle(Theme.gold)
+                .accessibilityHidden(true)
+            Text("Analytics réservées à Pro")
+                .font(.headline)
+            Text("Valeur de cave, répartitions par couleur et région, et bouteilles à boire en priorité : passez à CaveOS Pro pour débloquer le tableau de bord.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button {
+                showPaywall = true
+            } label: {
+                Text("Découvrir Pro")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.wine)
+        }
+        .padding(Theme.Spacing.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Contenu
