@@ -91,6 +91,19 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.louisbdc.caveos.tests
         GENERATE_INFOPLIST_FILE: YES
 
+  CaveOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - CaveOSUITests
+    dependencies:
+      - target: CaveOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.louisbdc.caveos.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: CaveOS
+
 schemes:
   CaveOS:
     build:
@@ -98,12 +111,14 @@ schemes:
         CaveOS: all
         CaveOSWidget: all
         CaveOSTests: [test]
+        CaveOSUITests: [test]
     run:
       # Permet de tester les achats StoreKit en simulateur sans App Store Connect.
       storeKitConfiguration: Configuration/Products.storekit
     test:
       targets:
         - CaveOSTests
+        - CaveOSUITests
   CaveOSWatch:
     build:
       targets:

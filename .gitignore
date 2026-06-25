@@ -34,3 +34,6 @@ server/*.db
 
 # Info.plist généré par XcodeGen
 CaveOS/Info.plist
+
+# Captures App Store générées (régénérables via scripts/screenshots.sh)
+AppStore/screenshots/
