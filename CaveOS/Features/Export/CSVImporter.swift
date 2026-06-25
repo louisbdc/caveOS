@@ -100,7 +100,7 @@ enum CSVImporter {
         do {
             try context.save()
         } catch {
-            print("CSVImporter.save a échoué : \(error)")
+            Log.export("CSVImporter.save a échoué : \(error.localizedDescription)")
             throw error
         }
 

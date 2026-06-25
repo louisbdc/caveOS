@@ -156,7 +156,7 @@ struct TastingNoteEditView: View {
             try context.save()
             dismiss()
         } catch {
-            print("Échec de l'enregistrement de la note de dégustation : \(error)")
+            Log.persistence("Échec de l'enregistrement de la note de dégustation : \(error.localizedDescription)")
         }
     }
 

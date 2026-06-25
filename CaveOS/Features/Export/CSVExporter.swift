@@ -81,7 +81,7 @@ enum CSVExporter {
             try content.write(to: url, atomically: true, encoding: .utf8)
             return url
         } catch {
-            print("Échec de l'écriture du fichier CSV : \(error)")
+            Log.export("Échec de l'écriture du fichier CSV : \(error.localizedDescription)")
             throw error
         }
     }

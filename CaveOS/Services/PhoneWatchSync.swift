@@ -25,10 +25,10 @@ enum PhoneWatchSync {
         do {
             try session.updateApplicationContext(payload)
         } catch {
-            print("PhoneWatchSync updateApplicationContext failed:", error.localizedDescription)
+            Log.sync("PhoneWatchSync updateApplicationContext failed : \(error.localizedDescription)")
             if session.isReachable {
                 session.sendMessage(payload, replyHandler: nil) { sendError in
-                    print("PhoneWatchSync sendMessage failed:", sendError.localizedDescription)
+                    Log.sync("PhoneWatchSync sendMessage failed : \(sendError.localizedDescription)")
                 }
             }
         }
@@ -45,7 +45,7 @@ private final class PhoneWatchSyncDelegate: NSObject, WCSessionDelegate, @unchec
         error: Error?
     ) {
         if let error {
-            print("PhoneWatchSync activation failed:", error.localizedDescription)
+            Log.sync("PhoneWatchSync activation failed : \(error.localizedDescription)")
         }
     }
 

@@ -76,7 +76,7 @@ enum SeedImporter {
         }
 
         if case let .failure(error) = repository.save() {
-            print("SeedImporter: échec de l'enregistrement du référentiel — \(error)")
+            Log.persistence("SeedImporter : échec de l'enregistrement du référentiel — \(error.localizedDescription)")
         }
     }
 
@@ -86,7 +86,7 @@ enum SeedImporter {
     /// si le fichier est absent ou illisible.
     private static func loadSeedData() -> SeedData? {
         guard let url = Bundle.main.url(forResource: "winedata", withExtension: "json") else {
-            print("SeedImporter: fichier winedata.json introuvable dans le bundle.")
+            Log.persistence("SeedImporter : fichier winedata.json introuvable dans le bundle.")
             return nil
         }
 
@@ -94,7 +94,7 @@ enum SeedImporter {
             let raw = try Data(contentsOf: url)
             return try JSONDecoder().decode(SeedData.self, from: raw)
         } catch {
-            print("SeedImporter: échec du décodage de winedata.json — \(error)")
+            Log.persistence("SeedImporter : échec du décodage de winedata.json — \(error.localizedDescription)")
             return nil
         }
     }

@@ -28,7 +28,7 @@ enum AppContainer {
             return container
         } catch {
             // Repli : si CloudKit échoue (entitlement absent), on retombe en local pur.
-            print("ModelContainer CloudKit indisponible, repli local: \(error)")
+            Log.persistence("ModelContainer CloudKit indisponible, repli local : \(error.localizedDescription)")
             let localConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory, cloudKitDatabase: .none)
             do {
                 let container = try ModelContainer(for: schema, configurations: [localConfig])

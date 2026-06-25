@@ -26,7 +26,7 @@ final class NotificationService {
         do {
             try await center.requestAuthorization(options: [.alert, .badge, .sound])
         } catch {
-            print("Échec de la demande d'autorisation de notifications : \(error)")
+            Log.notifications("Échec de la demande d'autorisation de notifications : \(error.localizedDescription)")
         }
     }
 
@@ -85,7 +85,7 @@ final class NotificationService {
 
         center.add(request) { error in
             if let error {
-                print("Échec de la planification de l'alerte d'apogée : \(error)")
+                Log.notifications("Échec de la planification de l'alerte d'apogée : \(error.localizedDescription)")
             }
         }
     }
@@ -122,7 +122,7 @@ final class NotificationService {
 
         center.add(request) { error in
             if let error {
-                print("Échec de la planification du rappel d'ouverture : \(error)")
+                Log.notifications("Échec de la planification du rappel d'ouverture : \(error.localizedDescription)")
             }
         }
     }
@@ -163,7 +163,7 @@ final class NotificationService {
 
         center.add(request) { error in
             if let error {
-                print("Échec de la planification de l'alerte « à boire vite » : \(error)")
+                Log.notifications("Échec de la planification de l'alerte « à boire vite » : \(error.localizedDescription)")
             }
         }
     }
@@ -231,7 +231,7 @@ final class NotificationService {
 
         center.add(request) { error in
             if let error {
-                print("Échec de la notification de stock bas : \(error)")
+                Log.notifications("Échec de la notification de stock bas : \(error.localizedDescription)")
             }
         }
     }
@@ -254,7 +254,7 @@ final class NotificationService {
 
         center.add(request) { error in
             if let error {
-                print("Échec de la notification de température : \(error)")
+                Log.notifications("Échec de la notification de température : \(error.localizedDescription)")
             }
         }
     }

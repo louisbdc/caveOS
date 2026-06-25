@@ -20,7 +20,7 @@ final class CaveRepository {
             try context.save()
             return .success(())
         } catch {
-            print("CaveRepository.save a échoué: \(error)")
+            Log.persistence("CaveRepository.save a échoué : \(error.localizedDescription)")
             return .failure(error)
         }
     }

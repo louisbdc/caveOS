@@ -32,7 +32,7 @@ enum ExcelExporter {
             try content.write(to: url, atomically: true, encoding: .utf8)
             return url
         } catch {
-            print("Échec de l'écriture du fichier Excel : \(error)")
+            Log.export("Échec de l'écriture du fichier Excel : \(error.localizedDescription)")
             throw error
         }
     }
