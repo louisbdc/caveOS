@@ -24,12 +24,16 @@ targets:
     sources:
       - CaveOS
       - Shared
+    configFiles:
+      Debug: Configuration/Secrets.xcconfig
+      Release: Configuration/Secrets.xcconfig
     dependencies:
       - target: CaveOSWidget
     info:
       path: CaveOS/Info.plist
       properties:
         CFBundleDisplayName: CaveOS
+        CaveOSScanKey: "$(CAVEOS_SCAN_KEY)"
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSceneManifest:

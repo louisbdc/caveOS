@@ -25,6 +25,7 @@ server/*.db
 # Secrets / env
 *.env
 .env
+Configuration/Secrets.xcconfig
 
 # Logs
 *.log
