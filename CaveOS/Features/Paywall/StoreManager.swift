@@ -25,7 +25,7 @@ final class StoreManager {
     /// Nombre de scans gratuits restants (persisté via UserDefaults).
     var freeScansRemaining: Int {
         didSet {
-            UserDefaults.standard.set(freeScansRemaining, forKey: Self.freeScansKey)
+            defaults.set(freeScansRemaining, forKey: Self.freeScansKey)
         }
     }
 
@@ -40,12 +40,14 @@ final class StoreManager {
 
     // MARK: - Privé
 
+    /// Stockage du quota de scans (injectable pour les tests).
+    private let defaults: UserDefaults
     private var updatesTask: Task<Void, Never>?
 
     // MARK: - Init
 
-    init() {
-        let defaults = UserDefaults.standard
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         if defaults.object(forKey: Self.freeScansKey) == nil {
             // Première installation : on initialise au quota par défaut.
             defaults.set(Self.freeScanLimit, forKey: Self.freeScansKey)
