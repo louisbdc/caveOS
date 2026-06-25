@@ -4,10 +4,7 @@ go 1.22.0
 
 toolchain go1.23.4
 
-require (
-	github.com/stripe/stripe-go/v81 v81.4.0
-	modernc.org/sqlite v1.34.4
-)
+require modernc.org/sqlite v1.34.4
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

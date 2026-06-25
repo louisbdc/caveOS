@@ -15,13 +15,16 @@ SCP="scp -i $SSH_KEY"
 echo "==> Préparation du dossier distant"
 $SSH "mkdir -p $REMOTE_DIR"
 
-echo "==> Copie des sources du serveur (la clé Stripe reste dans .env sur le VPS, jamais copiée)"
-$SCP server/go.mod server/main.go server/billing.go server/seed.json server/README.md server/caveos-server.service \
+echo "==> Copie des sources du serveur (le fichier .env du VPS n'est jamais copié)"
+$SCP server/go.mod server/main.go server/pages.go server/seed.json server/README.md server/caveos-server.service \
      "$VPS_USER@$VPS_HOST:$REMOTE_DIR/"
-# go.sum si présent (dépendances Stripe résolues)
+# go.sum si présent
 [ -f server/go.sum ] && $SCP server/go.sum "$VPS_USER@$VPS_HOST:$REMOTE_DIR/" || true
 
-echo "==> Build sur le VPS (résolution des dépendances Stripe)"
+echo "==> Retrait de l'ancien billing.go côté VPS (paiement désormais 100 % StoreKit)"
+$SSH "rm -f $REMOTE_DIR/billing.go"
+
+echo "==> Build sur le VPS"
 $SSH "cd $REMOTE_DIR && $GO_BIN env -w GOFLAGS=-mod=mod && $GO_BIN mod tidy && $GO_BIN build -o caveos-server . && echo 'build OK'"
 
 echo "==> Installation du service systemd"

@@ -74,9 +74,8 @@ type EnrichResult struct {
 // --- Server -----------------------------------------------------------------
 
 type server struct {
-	db      *sql.DB
-	logger  *slog.Logger
-	billing billing
+	db     *sql.DB
+	logger *slog.Logger
 }
 
 func main() {
@@ -99,15 +98,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &server{db: db, logger: logger, billing: loadBilling()}
-
-	if err := initBillingSchema(db); err != nil {
-		logger.Error("failed to init billing schema", "error", err)
-		os.Exit(1)
-	}
-	logger.Info("billing config", "enabled", srv.billing.enabled)
+	srv := &server{db: db, logger: logger}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", srv.handleHome)
+	mux.HandleFunc("GET /privacy", srv.handlePrivacy)
+	mux.HandleFunc("GET /support", srv.handleSupport)
 	mux.HandleFunc("GET /health", srv.handleHealth)
 	mux.HandleFunc("GET /v1/wines/search", srv.handleSearch)
 	mux.HandleFunc("GET /v1/grapes", srv.handleGrapes)
@@ -117,12 +113,6 @@ func main() {
 	mux.HandleFunc("GET /v1/barcode", srv.handleBarcode)
 	mux.HandleFunc("GET /v1/db/latest", srv.handleDBLatest)
 	mux.HandleFunc("GET /credits", srv.handleCredits)
-	mux.HandleFunc("POST /v1/billing/checkout", srv.handleCheckout)
-	mux.HandleFunc("GET /v1/billing/status", srv.handleBillingStatus)
-	mux.HandleFunc("POST /v1/billing/portal", srv.handlePortal)
-	mux.HandleFunc("POST /v1/billing/webhook", srv.handleWebhook)
-	mux.HandleFunc("GET /billing/success", srv.handleBillingSuccess)
-	mux.HandleFunc("GET /billing/cancel", srv.handleBillingCancel)
 
 	port := os.Getenv("PORT")
 	if port == "" {
