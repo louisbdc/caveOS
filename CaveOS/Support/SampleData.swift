@@ -158,12 +158,14 @@ enum SampleData {
     private static func insertCellars(into context: ModelContext) -> [String: Location] {
         var byLabel: [String: Location] = [:]
 
-        let main = Cellar(name: "Cave électrique — salon", type: .electric, rows: 6, columns: 8, levels: 1)
+        let main = Cellar(name: "Cave électrique — salon", type: .electric, rows: 1, columns: 4, levels: 1)
         context.insert(main)
-        for level in 1...4 {
+        for index in 0..<4 {
+            // 4 clayettes sur un même niveau (colonnes 0…3) : levelIndex 0 cohérent
+            // avec l'affichage (la vue regroupe par niveau réel des emplacements).
             let location = Location(
-                kind: .shelf, label: "Clayette \(level)",
-                levelIndex: level, column: 0, isFront: true, capacity: 12, cellar: main
+                kind: .shelf, label: "Clayette \(index + 1)",
+                levelIndex: 0, column: index, isFront: true, capacity: 12, cellar: main
             )
             context.insert(location)
             byLabel[location.label] = location

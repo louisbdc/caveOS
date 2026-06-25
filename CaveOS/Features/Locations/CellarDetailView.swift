@@ -23,9 +23,13 @@ struct CellarDetailView: View {
         )
     }
 
-    /// Niveaux triés, du plus haut index au plus bas (haut de la cave en premier).
+    /// Niveaux réellement occupés par des emplacements, du plus haut au plus bas.
+    ///
+    /// Dérivé des emplacements existants (et non d'un simple `0..<levels`) pour
+    /// qu'aucun emplacement ne soit masqué si son `levelIndex` sort de la plage
+    /// configurée, et pour éviter les sections « Niveau » vides.
     private var levels: [Int] {
-        Array(0..<max(cellar.levels, 1)).reversed()
+        Set(cellar.locations.map(\.levelIndex)).sorted(by: >)
     }
 
     var body: some View {
@@ -49,11 +53,12 @@ struct CellarDetailView: View {
         .toolbar {
             if cellar.locations.count > 1 {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Picker("Affichage", selection: $isGrid) {
-                        Image(systemName: "square.grid.2x2").tag(true)
-                        Image(systemName: "list.bullet").tag(false)
+                    Button {
+                        isGrid.toggle()
+                    } label: {
+                        Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
                     }
-                    .pickerStyle(.segmented)
+                    .accessibilityLabel(isGrid ? "Afficher en liste" : "Afficher en grille")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -316,11 +321,16 @@ private struct LocationRow: View {
                 .font(.subheadline.bold())
                 .frame(minWidth: 64, alignment: .leading)
 
-            ForEach(location.bottles) { bottle in
-                BottleChip(bottle: bottle)
+            // Les bouteilles défilent horizontalement : un emplacement bien rempli
+            // ne déborde plus de l'écran (le libellé et le compteur restent visibles).
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Theme.Spacing.xs) {
+                    ForEach(location.bottles) { bottle in
+                        BottleChip(bottle: bottle)
+                    }
+                }
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             StatusBadge(text: "\(count)", color: Theme.gold, systemImage: "wineglass")
         }
