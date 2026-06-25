@@ -46,35 +46,94 @@ struct ScanView: View {
     @State private var cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
 
     // Moteur d'analyse choisi (Appareil / IA), persisté.
+    // Migration : un ancien rawValue "mistral"/"gemini" ne correspond plus à un
+    // case → `@AppStorage` (RawRepresentable) retombe sur la valeur par défaut
+    // `.device` sans crash.
     @AppStorage(ScanEngine.storageKey) private var scanEngine = ScanEngine.device
-    // Dernière photo importée, conservée pour réanalyse au changement de moteur.
+    // Dernière photo (capturée ou importée), conservée pour réanalyse au changement de moteur.
     @State private var lastImage: UIImage?
     // Indique que l'IA a échoué et que l'analyse locale a pris le relais.
     @State private var usedFallback = false
     // Moteur ayant réellement produit la dernière analyse (≠ moteur sélectionné si fallback).
     @State private var analysisSource: ScanEngine?
+    // Évite de décompter deux fois le quota IA pour une même photo (une réanalyse
+    // au changement de moteur ne doit pas re-décompter). Remis à false à chaque
+    // nouvelle photo capturée/importée.
+    @State private var aiScanConsumed = false
+
+    // Champs déduits par l'IA (passe 2), éditables et confirmables dans le récap.
+    @State private var color: WineColor?
+    @State private var wineType: WineType?
+    @State private var region: String = ""
+    @State private var country: String = ""
+    @State private var peakFrom: Int?
+    @State private var peakTo: Int?
+    // Clés des champs marqués « estimé » (déductions IA non encore confirmées).
+    @State private var inferredFields: Set<String> = []
+
+    // Capture IA plein écran (preview AVFoundation + blueprint bouteille) et son
+    // pont d'action partagé pour déclencher le shutter sans recréer le contrôleur.
+    @State private var captureProxy = CameraProxy()
+    @State private var showAICapture = false
+    // Import demandé depuis l'écran de capture : présenté après fermeture du cover
+    // (évite la course « présenter pendant la fermeture »).
+    @State private var pendingImport = false
+    @State private var showPhotoPicker = false
 
     var body: some View {
         NavigationStack {
-            Group {
-                if store.canUseScan() {
-                    scannerContent
-                } else {
-                    gatingContent
+            // Le scan « Appareil » est gratuit et illimité : aucun gating global.
+            // L'accès à l'IA est géré au niveau du sélecteur (quota / paywall).
+            scannerContent
+                .navigationTitle("Scanner une étiquette")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Annuler") { dismiss() }
+                    }
                 }
-            }
-            .navigationTitle("Scanner une étiquette")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
+                .sheet(isPresented: $showPaywall) {
+                    PaywallView()
                 }
-            }
-            .sheet(isPresented: $showPaywall) {
-                PaywallView()
-            }
-            .task { loadReferenceData() }
+                .fullScreenCover(isPresented: $showAICapture, onDismiss: handleCaptureCoverDismiss) {
+                    aiCaptureCover
+                }
+                .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
+                .task {
+                    loadReferenceData()
+                    // IA persistée mais quota épuisé (non-Pro) : on repasse sur l'appareil
+                    // pour ne pas afficher un mode IA qui retomberait en local silencieux.
+                    if scanEngine.isAI && !store.canUseAIScan() {
+                        scanEngine = .device
+                    }
+                }
         }
+    }
+
+    // MARK: - Capture IA (plein écran)
+
+    private var aiCaptureCover: some View {
+        AICaptureView(
+            proxy: captureProxy,
+            onCapture: { image in
+                lastImage = image
+                aiScanConsumed = false
+                showAICapture = false
+                Task { await analyzeImage(image) }
+            },
+            onImport: {
+                // L'appelant ferme le cover puis présente le PhotosPicker.
+                pendingImport = true
+                showAICapture = false
+            },
+            cameraStatus: $cameraStatus
+        )
+    }
+
+    private func handleCaptureCoverDismiss() {
+        guard pendingImport else { return }
+        pendingImport = false
+        showPhotoPicker = true
     }
 
     // MARK: - Contenu principal (scan autorisé)
@@ -82,41 +141,145 @@ struct ScanView: View {
     @ViewBuilder
     private var scannerContent: some View {
         VStack(spacing: 0) {
+            // Zone de capture : plein écran tant qu'aucun résultat, puis réduite pour
+            // laisser la place au récap défilable (bouton Valider épinglé en bas).
             captureArea
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: hasAnalyzed ? 220 : .infinity)
 
-            controls
+            if hasAnalyzed {
+                ScrollView {
+                    controls
+                }
                 .background(.ultraThinMaterial)
+
+                validateButton
+                    .padding(Theme.Spacing.m)
+                    .background(.ultraThinMaterial)
+            } else {
+                controls
+                    .background(.ultraThinMaterial)
+            }
         }
     }
 
     @ViewBuilder
     private var captureArea: some View {
+        if scanEngine.isAI {
+            aiCapturePrompt
+        } else {
+            deviceCaptureArea
+        }
+    }
+
+    /// Aperçu de scan live « Appareil » (DataScanner Apple Vision, hors-ligne).
+    @ViewBuilder
+    private var deviceCaptureArea: some View {
         if cameraStatus == .denied || cameraStatus == .restricted {
             CameraDeniedView()
         } else if LiveScannerAvailability.isAvailable {
-            DataScannerRepresentable(
-                onRecognizedText: { lines in
-                    recognizedLines = lines
-                },
-                onRecognizedBarcode: { payload in
-                    if let ean = Self.validEAN(payload) {
-                        scannedEAN = ean
+            ZStack {
+                DataScannerRepresentable(
+                    onRecognizedText: { lines in
+                        recognizedLines = lines
+                    },
+                    onRecognizedBarcode: { payload in
+                        if let ean = Self.validEAN(payload) {
+                            scannedEAN = ean
+                        }
                     }
-                }
-            )
-            .ignoresSafeArea(edges: .horizontal)
-            .task { await ensureCameraAccess() }
+                )
+                .ignoresSafeArea(edges: .horizontal)
+                .task { await ensureCameraAccess() }
+
+                // Même silhouette de cadrage qu'en mode IA, mais voile très léger
+                // pour ne pas gêner la lecture OCR en direct.
+                BlueprintOverlay(dimming: 0.12)
+            }
         } else {
             ScannerUnavailableView()
         }
+    }
+
+    /// Invite à la capture IA : la preview AVFoundation + blueprint vit dans
+    /// `AICaptureView`, présentée en plein écran via le bouton « Prendre une photo ».
+    private var aiCapturePrompt: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: "sparkles.rectangle.stack")
+                .font(.system(size: 52))
+                .foregroundStyle(Theme.gold)
+                .accessibilityHidden(true)
+            Text("Scan par IA")
+                .font(.headline)
+            Text("Cadrez l'étiquette dans la silhouette puis prenez la photo. L'IA lit l'étiquette et complète les informations du vin.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(Theme.Spacing.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
     private var controls: some View {
         VStack(spacing: Theme.Spacing.m) {
             enginePicker
+            actionButtons
 
+            if isProcessingPhoto {
+                ProgressView("Analyse de la photo…")
+            }
+
+            if let scanFeedback {
+                Label(scanFeedback, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if hasAnalyzed {
+                editableSummary
+            }
+        }
+        .padding(Theme.Spacing.m)
+        .onChange(of: photoItem) { _, newValue in
+            guard let newValue else { return }
+            Task { await processPhoto(newValue) }
+        }
+        .onChange(of: scanEngine) { _, newValue in
+            // L'IA est accessible aux non-Pro tant qu'il reste des scans IA gratuits ;
+            // sinon on rebascule sur l'appareil et on propose Pro.
+            if newValue.isAI && !store.canUseAIScan() {
+                scanEngine = .device
+                showPaywall = true
+                return
+            }
+            // Réanalyse la dernière photo avec le nouveau moteur, si disponible.
+            if let image = lastImage {
+                Task { await analyzeImage(image) }
+            }
+        }
+    }
+
+    /// Boutons d'action adaptés au moteur : capture/import en IA, import/analyse en local.
+    @ViewBuilder
+    private var actionButtons: some View {
+        if scanEngine.isAI {
+            HStack(spacing: Theme.Spacing.m) {
+                Button {
+                    showAICapture = true
+                } label: {
+                    Label("Prendre une photo", systemImage: "camera")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Label("Importer", systemImage: "photo")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+        } else {
             HStack(spacing: Theme.Spacing.m) {
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     Label("Importer une photo", systemImage: "photo")
@@ -132,39 +295,6 @@ struct ScanView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(recognizedLines.isEmpty && !hasAnalyzed)
-            }
-
-            if isProcessingPhoto {
-                ProgressView("Analyse de la photo…")
-            }
-
-            if let scanFeedback {
-                Label(scanFeedback, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if hasAnalyzed {
-                editableSummary
-                validateButton
-            }
-        }
-        .padding(Theme.Spacing.m)
-        .onChange(of: photoItem) { _, newValue in
-            guard let newValue else { return }
-            Task { await processPhoto(newValue) }
-        }
-        .onChange(of: scanEngine) { _, newValue in
-            // Un moteur d'IA est réservé Pro : on bloque la sélection et propose Pro.
-            if newValue.isAI && !store.isPro {
-                scanEngine = .device
-                showPaywall = true
-                return
-            }
-            // Réanalyse la dernière photo avec le nouveau moteur, si disponible.
-            if let image = lastImage {
-                Task { await analyzeImage(image) }
             }
         }
     }
@@ -182,8 +312,10 @@ struct ScanView: View {
             .pickerStyle(.segmented)
 
             Text(scanEngine.isAI
-                ? "L'IA analyse une photo importée (réservé Pro)."
-                : "Analyse sur l'appareil, hors-ligne.")
+                ? (store.isPro
+                    ? "IA : Mistral + Gemini, lecture puis déduction."
+                    : "IA : \(store.freeScansRemaining) scan(s) gratuit(s) restant(s).")
+                : "Analyse sur l'appareil, hors-ligne et gratuite.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -208,7 +340,27 @@ struct ScanView: View {
             labeledField("Millésime", text: $vintageText)
                 .keyboardType(.numberPad)
             labeledField("Appellation", text: $appellation)
-            labeledField("Cépages (séparés par des virgules)", text: $grapesText)
+
+            EstimableTextField(
+                title: "Cépages (séparés par des virgules)",
+                text: $grapesText,
+                isEstimated: inferredFields.contains(ScannedLabel.Field.grapes),
+                onEdit: { inferredFields.remove(ScannedLabel.Field.grapes) }
+            )
+
+            colorPicker
+            typePicker
+
+            EstimableTextField(
+                title: "Région",
+                text: $region,
+                isEstimated: inferredFields.contains(ScannedLabel.Field.region),
+                onEdit: { inferredFields.remove(ScannedLabel.Field.region) }
+            )
+            // « Pays » et « Apogée estimée » volontairement absents du récap (v1) :
+            // il n'y a pas de Wine.country à persister, et l'apogée est calculée par
+            // ApogeeEngine (cépages × région × stockage) pour rester cohérente avec
+            // la fiche bouteille — afficher une seconde fenêtre IA induirait en erreur.
 
             if let detectedFormat {
                 readOnlyField("Format", value: detectedFormat)
@@ -221,6 +373,53 @@ struct ScanView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Picker couleur (pré-rempli par l'IA) : sélectionner confirme et retire le badge.
+    private var colorPicker: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            EstimatedFieldHeader(
+                title: "Couleur",
+                isEstimated: inferredFields.contains(ScannedLabel.Field.color)
+            )
+            Picker("Couleur", selection: Binding(
+                get: { color },
+                set: { newValue in
+                    color = newValue
+                    inferredFields.remove(ScannedLabel.Field.color)
+                }
+            )) {
+                Text("Non précisé").tag(WineColor?.none)
+                ForEach(WineColor.allCases) { c in
+                    Text(c.label).tag(WineColor?.some(c))
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(color?.tint ?? .secondary)
+        }
+    }
+
+    /// Picker type de vin (pré-rempli par l'IA) : sélectionner confirme et retire le badge.
+    private var typePicker: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            EstimatedFieldHeader(
+                title: "Type",
+                isEstimated: inferredFields.contains(ScannedLabel.Field.wineType)
+            )
+            Picker("Type", selection: Binding(
+                get: { wineType },
+                set: { newValue in
+                    wineType = newValue
+                    inferredFields.remove(ScannedLabel.Field.wineType)
+                }
+            )) {
+                Text("Non précisé").tag(WineType?.none)
+                ForEach(WineType.allCases) { t in
+                    Text(t.label).tag(WineType?.some(t))
+                }
+            }
+            .pickerStyle(.menu)
+        }
     }
 
     private func readOnlyField(_ title: String, value: String, monospaced: Bool = false) -> some View {
@@ -251,32 +450,6 @@ struct ScanView: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-    }
-
-    // MARK: - Gating (scan non autorisé)
-
-    private var gatingContent: some View {
-        VStack(spacing: Theme.Spacing.l) {
-            Image(systemName: "lock.fill")
-                .font(.largeTitle)
-                .foregroundStyle(Theme.gold)
-                .accessibilityHidden(true)
-            Text("Scans épuisés")
-                .font(.headline)
-            Text("Vous avez utilisé tous vos scans gratuits. Passez à CaveOS Pro pour scanner sans limite.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button {
-                showPaywall = true
-            } label: {
-                Text("Découvrir Pro")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding(Theme.Spacing.l)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Permission caméra
@@ -347,6 +520,20 @@ struct ScanView: View {
         grapesText = label.grapes.joined(separator: ", ")
         detectedFormat = label.format
         detectedABV = label.abv
+        color = label.color
+        wineType = label.wineType
+        region = label.region ?? ""
+        country = label.country ?? ""
+        peakFrom = label.peakFrom
+        peakTo = label.peakTo
+        inferredFields = label.inferredFields
+    }
+
+    /// `true` si le label porte au moins un champ exploitable (≠ étiquette illisible) :
+    /// sert à ne décompter le quota IA que pour un scan réellement utile.
+    private static func isExploitable(_ label: ScannedLabel) -> Bool {
+        label.wineName != nil || label.producer != nil || label.ean != nil
+            || label.vintage != nil || label.appellation != nil || !label.grapes.isEmpty
     }
 
     private func validate() {
@@ -363,15 +550,16 @@ struct ScanView: View {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+        label.color = color
+        label.wineType = wineType
+        label.region = region.isEmpty ? nil : region
+        label.country = country.isEmpty ? nil : country
+        label.peakFrom = peakFrom
+        label.peakTo = peakTo
+        label.inferredFields = inferredFields
 
-        // Ne décompte un scan gratuit que si l'analyse a produit au moins un champ
-        // exploitable : une étiquette illisible ne doit pas coûter un scan.
-        let detectedSomething = label.wineName != nil || label.producer != nil
-            || label.ean != nil || label.vintage != nil
-            || label.appellation != nil || !label.grapes.isEmpty
-        if detectedSomething {
-            store.consumeFreeScan()
-        }
+        // Le décompte du quota IA a déjà eu lieu au scan réussi (voir analyzeImage) :
+        // valider ou annuler ne (dé)compte plus rien. Le device OCR reste gratuit illimité.
         onComplete(label)
         dismiss()
     }
@@ -389,22 +577,31 @@ struct ScanView: View {
                 return
             }
             lastImage = uiImage
+            aiScanConsumed = false
             await analyzeImage(uiImage)
         } catch {
             scanFeedback = "L'analyse de la photo a échoué. Réessayez avec une image plus nette."
         }
     }
 
-    /// Analyse une image selon le moteur choisi. En mode IA (Pro), délègue au
-    /// serveur ; en cas d'échec réseau, bascule automatiquement sur l'OCR local.
+    /// Analyse une image selon le moteur choisi. En mode IA (quota gratuit ou Pro),
+    /// délègue au serveur (Mistral + Gemini + déduction) ; en cas d'échec réseau,
+    /// bascule automatiquement sur l'OCR local.
     private func analyzeImage(_ uiImage: UIImage) async {
         usedFallback = false
 
-        if scanEngine.isAI, store.isPro, let provider = scanEngine.providerKey {
+        if scanEngine.isAI, store.canUseAIScan() {
             do {
-                let label = try await AIScanService.scan(image: uiImage, provider: provider)
+                let label = try await AIScanService.scan(image: uiImage)
                 recognizedLines = label.rawLines
                 analysisSource = scanEngine
+                // Décompte le quota IA dès qu'un scan renvoie un résultat exploitable,
+                // une seule fois par photo : un non-Pro ne peut plus lire les champs
+                // puis « Annuler » pour scanner gratuitement à l'infini.
+                if !aiScanConsumed, Self.isExploitable(label) {
+                    store.consumeFreeScan()
+                    aiScanConsumed = true
+                }
                 applyAnalyzedLabel(label)
                 return
             } catch {

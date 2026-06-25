@@ -1,7 +1,7 @@
 import XCTest
 @testable import CaveOS
 
-/// Tests de la logique freemium de `StoreManager` (quota de scans gratuits et
+/// Tests de la logique freemium de `StoreManager` (quota de scans IA gratuits et
 /// bypass Pro). Chaque test utilise un `UserDefaults` isolé pour ne pas toucher
 /// l'état réel de l'app.
 @MainActor
@@ -22,7 +22,7 @@ final class StoreManagerTests: XCTestCase {
     func testFirstLaunchSeedsFreeScanLimit() {
         let store = StoreManager(defaults: freshDefaults())
         XCTAssertEqual(store.freeScansRemaining, StoreManager.freeScanLimit)
-        XCTAssertTrue(store.canUseScan())
+        XCTAssertTrue(store.canUseAIScan())
     }
 
     func testQuotaIsPersistedAcrossInstances() {
@@ -52,7 +52,7 @@ final class StoreManagerTests: XCTestCase {
             store.consumeFreeScan()
         }
         XCTAssertEqual(store.freeScansRemaining, 0)
-        XCTAssertFalse(store.canUseScan())
+        XCTAssertFalse(store.canUseAIScan())
 
         // Au-delà de zéro, on ne descend pas dans le négatif.
         store.consumeFreeScan()
@@ -66,10 +66,10 @@ final class StoreManagerTests: XCTestCase {
         for _ in 0..<StoreManager.freeScanLimit {
             store.consumeFreeScan()
         }
-        XCTAssertFalse(store.canUseScan())
+        XCTAssertFalse(store.canUseAIScan())
 
         store.isPro = true
-        XCTAssertTrue(store.canUseScan(), "Un utilisateur Pro peut scanner même à quota épuisé.")
+        XCTAssertTrue(store.canUseAIScan(), "Un utilisateur Pro peut scanner même à quota épuisé.")
     }
 
     func testProDoesNotConsumeFreeScans() {
@@ -78,5 +78,27 @@ final class StoreManagerTests: XCTestCase {
         store.consumeFreeScan()
         XCTAssertEqual(store.freeScansRemaining, StoreManager.freeScanLimit,
                        "Un achat Pro ne doit pas entamer le quota gratuit.")
+    }
+
+    // MARK: - Scan IA spécifiquement
+
+    func testCanUseAIScanFalseAtZeroForNonPro() {
+        let store = StoreManager(defaults: freshDefaults())
+        for _ in 0..<StoreManager.freeScanLimit {
+            store.consumeFreeScan()
+        }
+        XCTAssertEqual(store.freeScansRemaining, 0)
+        XCTAssertFalse(store.canUseAIScan(),
+                       "Sans Pro et à quota épuisé, le scan IA est bloqué.")
+    }
+
+    func testProCanUseAIScanAtZero() {
+        let store = StoreManager(defaults: freshDefaults())
+        for _ in 0..<StoreManager.freeScanLimit {
+            store.consumeFreeScan()
+        }
+        store.isPro = true
+        XCTAssertTrue(store.canUseAIScan(),
+                      "Un utilisateur Pro peut lancer un scan IA même à quota épuisé.")
     }
 }

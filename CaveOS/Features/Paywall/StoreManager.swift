@@ -1,7 +1,7 @@
 import Foundation
 import StoreKit
 
-/// Gère le freemium (scans gratuits limités) et l'achat Pro via StoreKit 2.
+/// Gère le freemium (scans IA gratuits limités) et l'achat Pro via StoreKit 2.
 /// Achat unique « à vie » + abonnement annuel. Restauration via AppStore.sync().
 @MainActor
 @Observable
@@ -12,7 +12,8 @@ final class StoreManager {
     static let lifetimeProductID = "com.louisbdc.caveos.pro.lifetime"
     static let subscriptionProductID = "com.louisbdc.caveos.pro.yearly"
 
-    /// Limite de scans gratuits avant invitation à passer Pro.
+    /// Limite de scans IA gratuits avant invitation à passer Pro.
+    /// (Le scan « Appareil » reste gratuit et illimité, hors quota.)
     static let freeScanLimit = 25
 
     private static let freeScansKey = "caveos.freeScansRemaining"
@@ -22,7 +23,7 @@ final class StoreManager {
     /// L'utilisateur a-t-il débloqué les fonctionnalités Pro ?
     var isPro: Bool = false
 
-    /// Nombre de scans gratuits restants (persisté via UserDefaults).
+    /// Nombre de scans IA gratuits restants (persisté via UserDefaults).
     var freeScansRemaining: Int {
         didSet {
             defaults.set(freeScansRemaining, forKey: Self.freeScansKey)
@@ -175,14 +176,19 @@ final class StoreManager {
         }
     }
 
-    // MARK: - Quota de scans
+    // MARK: - Quota de scans IA
 
-    /// L'utilisateur peut-il lancer un scan ?
-    func canUseScan() -> Bool {
+    /// L'utilisateur peut-il lancer un scan IA ?
+    ///
+    /// Le quota ne gate QUE l'IA : le scan « Appareil » (OCR local) reste gratuit
+    /// et illimité et ne consomme jamais de scan.
+    func canUseAIScan() -> Bool {
         isPro || freeScansRemaining > 0
     }
 
-    /// Consomme un scan gratuit si l'utilisateur n'est pas Pro.
+    /// Consomme un scan IA gratuit si l'utilisateur n'est pas Pro.
+    ///
+    /// À n'appeler qu'après un scan IA réussi — jamais pour le device OCR.
     func consumeFreeScan() {
         guard !isPro else { return }
         if freeScansRemaining > 0 {

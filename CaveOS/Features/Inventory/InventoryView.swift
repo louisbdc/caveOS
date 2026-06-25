@@ -34,6 +34,7 @@ struct InventoryView: View {
                 }
             }
             .navigationTitle("Cave")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
             .searchable(
                 text: $filter.text,
@@ -278,6 +279,11 @@ struct InventoryView: View {
             wine.producer = resolveProducer(named: producerName)
         }
 
+        // Couleur / type (passe 2 — déjà confirmés ou corrigés par l'utilisateur
+        // dans le récap du scan).
+        if let color = label.color { wine.color = color }
+        if let type = label.wineType { wine.type = type }
+
         if let appellationName = label.appellation,
            let appellation = firstMatch(of: Appellation.self, name: appellationName, key: { $0.name }) {
             wine.appellation = appellation
@@ -285,6 +291,16 @@ struct InventoryView: View {
                let region = firstMatch(of: Region.self, name: regionName, key: { $0.name }) {
                 wine.region = region
             }
+        }
+
+        // Région déduite (passe 2) : on ne la rattache QUE si elle existe déjà dans
+        // le référentiel embarqué (jamais de création, pour éviter les régions
+        // orphelines non nettoyées par `cleanupOrphans`).
+        if wine.region == nil,
+           let regionName = label.region?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !regionName.isEmpty,
+           let region = firstMatch(of: Region.self, name: regionName, key: { $0.name }) {
+            wine.region = region
         }
 
         if !label.grapes.isEmpty {

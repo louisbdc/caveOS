@@ -2,14 +2,13 @@ import Foundation
 
 /// Moteur d'analyse d'étiquette choisi par l'utilisateur.
 ///
-/// `device` reste gratuit et hors-ligne (Apple Vision + `LabelParser`). Les moteurs
-/// d'IA délèguent l'extraction structurée à un fournisseur distant via le serveur
-/// CaveOS et sont réservés aux abonnés Pro. Ajouter un fournisseur se limite à
-/// ajouter un `case` ici (et son implémentation côté serveur).
+/// `device` reste gratuit, hors-ligne et illimité (Apple Vision + `LabelParser`).
+/// Le moteur `ai` délègue l'extraction structurée au serveur CaveOS qui orchestre
+/// les deux passes (lecture Mistral + Gemini, puis déduction) ; il est soumis au
+/// quota de scans IA gratuits puis réservé aux abonnés Pro.
 enum ScanEngine: String, CaseIterable, Identifiable {
     case device
-    case mistral
-    case gemini
+    case ai
 
     /// Clé `@AppStorage` partagée pour persister le choix.
     static let storageKey = "caveos.scanEngine"
@@ -20,15 +19,14 @@ enum ScanEngine: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .device: return "Appareil"
-        case .mistral: return "Mistral"
-        case .gemini: return "Gemini"
+        case .ai: return "IA"
         }
     }
 
     var systemImage: String {
         switch self {
         case .device: return "iphone"
-        case .mistral, .gemini: return "sparkles"
+        case .ai: return "sparkles"
         }
     }
 
@@ -36,14 +34,10 @@ enum ScanEngine: String, CaseIterable, Identifiable {
     var analysisLabel: String {
         switch self {
         case .device: return "Analysé sur l'appareil"
-        case .mistral: return "Analysé par Mistral"
-        case .gemini: return "Analysé par Gemini"
+        case .ai: return "Analysé par IA (Mistral + Gemini)"
         }
     }
 
-    /// `true` si le moteur délègue à un fournisseur d'IA distant (réservé Pro).
-    var isAI: Bool { self != .device }
-
-    /// Identifiant du fournisseur transmis au serveur, ou `nil` pour le moteur local.
-    var providerKey: String? { isAI ? rawValue : nil }
+    /// `true` si le moteur délègue aux fournisseurs distants (quota IA / Pro).
+    var isAI: Bool { self == .ai }
 }
