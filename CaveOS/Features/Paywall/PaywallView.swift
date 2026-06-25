@@ -32,6 +32,9 @@ struct PaywallView: View {
                 }
             }
             .task {
+                // Évite un banner d'erreur périmé : le StoreManager est partagé et
+                // conserverait une erreur d'un précédent affichage du paywall.
+                store.purchaseError = nil
                 await store.loadProducts()
             }
             .overlay(alignment: .bottom) {
@@ -201,7 +204,7 @@ struct PaywallView: View {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 56))
                     .foregroundStyle(Theme.gold)
-                Text("CaveOS Pro débloqué ✓")
+                Text("CaveOS Pro débloqué")
                     .font(.headline)
             }
             .padding(Theme.Spacing.xl)

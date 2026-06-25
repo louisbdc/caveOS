@@ -78,7 +78,7 @@ struct SettingsView: View {
     private var accountSection: some View {
         Section("Abonnement") {
             if store.isPro {
-                Label("CaveOS Pro actif ✓", systemImage: "checkmark.seal.fill")
+                Label("CaveOS Pro actif", systemImage: "checkmark.seal.fill")
                     .foregroundStyle(Theme.gold)
             } else {
                 Button {
