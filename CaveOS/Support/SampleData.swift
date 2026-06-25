@@ -7,9 +7,10 @@ import SwiftData
 ///
 /// Construit un `ModelContainer` **en mémoire** (jamais persisté, jamais synchronisé)
 /// peuplé d'une cave crédible : deux caves physiques, leurs emplacements, un catalogue
-/// de vins variés (rouges, blancs, effervescent, liquoreux ; France, Italie, Espagne,
-/// Portugal, États-Unis) et des bouteilles couvrant tous les états et tous les statuts
-/// d'apogée calculés par ``ApogeeEngine`` à la date courante.
+/// de vins variés couvrant **les sept couleurs** (rouge, blanc, rosé, effervescent,
+/// liquoreux, fortifié, orange ; France, Italie, Espagne, Portugal, États-Unis) et des
+/// bouteilles couvrant tous les états et tous les statuts d'apogée calculés par
+/// ``ApogeeEngine`` à la date courante — utile pour juger les badges et leur contraste.
 ///
 /// Compilé uniquement en `DEBUG` : ce fichier n'est pas embarqué en production.
 enum SampleData {
@@ -76,7 +77,10 @@ enum SampleData {
             ("Riesling", "white", 2, 8, 25),
             ("Sauvignon Blanc", "white", 0, 2, 8),
             ("Sémillon", "white", 2, 8, 20),
-            ("Chenin Blanc", "white", 2, 8, 25)
+            ("Chenin Blanc", "white", 2, 8, 25),
+            ("Cinsault", "red", 1, 3, 8),
+            ("Touriga Nacional", "red", 5, 20, 50),
+            ("Ribolla Gialla", "white", 2, 8, 16)
         ]
         var byName: [String: Grape] = [:]
         for (name, color, min, peak, max) in definitions {
@@ -104,7 +108,9 @@ enum SampleData {
             ("Piémont", "Italie", .premium),
             ("Toscane", "Italie", .premium),
             ("Rioja", "Espagne", .mid),
-            ("Napa Valley", "États-Unis", .premium)
+            ("Napa Valley", "États-Unis", .premium),
+            ("Porto", "Portugal", .premium),
+            ("Frioul", "Italie", .mid)
         ]
         var byName: [String: Region] = [:]
         for (name, country, tier) in definitions {
@@ -296,7 +302,28 @@ enum SampleData {
               region: "Vallée du Rhône", appellation: "Châteauneuf-du-Pape",
               grapes: ["Grenache", "Syrah", "Mourvèdre"],
               vintage: 2016, format: .bottle, quantity: 1, price: 65, state: .consumed,
-              isFavorite: false, lowStock: nil, location: "Clayette 1", note: "Bue à Noël 2025.")
+              isFavorite: false, lowStock: nil, location: "Clayette 1", note: "Bue à Noël 2025."),
+
+        // Rosé de gastronomie (couleur rosé).
+        .init(wine: "Bandol Rosé", producer: "Domaine Tempier", color: .rose, type: .still,
+              region: "Provence", appellation: "Bandol",
+              grapes: ["Mourvèdre", "Grenache", "Cinsault"],
+              vintage: 2024, format: .bottle, quantity: 6, price: 32, state: .inCellar,
+              isFavorite: true, lowStock: 3, location: "Clayette 2", note: "Rosé de garde, à servir frais."),
+
+        // Porto Vintage (couleur fortifié).
+        .init(wine: "Porto Vintage", producer: "Taylor's", color: .fortified, type: .fortified,
+              region: "Porto", appellation: nil,
+              grapes: ["Touriga Nacional"],
+              vintage: 2011, format: .bottle, quantity: 2, price: 95, state: .inCellar,
+              isFavorite: false, lowStock: nil, location: "Casier bas", note: "À carafer longuement avant le service."),
+
+        // Vin orange du Frioul (couleur orange), entamé pour montrer aussi l'état « Entamée ».
+        .init(wine: "Ribolla Gialla", producer: "Gravner", color: .orange, type: .still,
+              region: "Frioul", appellation: nil,
+              grapes: ["Ribolla Gialla"],
+              vintage: 2019, format: .bottle, quantity: 2, price: 70, state: .opened,
+              isFavorite: false, lowStock: nil, location: "Clayette 4", note: "Macération longue (vin orange), entamé.")
     ]
 
     /// Insère le catalogue ; renvoie les bouteilles indexées par nom de vin (pour les dégustations).
