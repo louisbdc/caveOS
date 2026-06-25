@@ -63,9 +63,17 @@ type geminiContent struct {
 	Parts []geminiPart `json:"parts"`
 }
 
+// geminiThinkingConfig pilote le budget de « réflexion » des modèles Gemini 3.x
+// (activé par défaut depuis I/O 2026). Pour une déduction déterministe on le met
+// à 0 afin d'éviter latence et tokens superflus.
+type geminiThinkingConfig struct {
+	ThinkingBudget int `json:"thinkingBudget"`
+}
+
 type geminiGenerationConfig struct {
-	ResponseMimeType string `json:"responseMimeType"`
-	ResponseSchema   any    `json:"responseSchema"`
+	ResponseMimeType string                `json:"responseMimeType"`
+	ResponseSchema   any                   `json:"responseSchema"`
+	ThinkingConfig   *geminiThinkingConfig `json:"thinkingConfig,omitempty"`
 }
 
 type geminiRequest struct {

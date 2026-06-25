@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,16 +16,24 @@ import (
 	"time"
 )
 
-// --- Scan: extraction structurée d'étiquette par un fournisseur d'IA ----------
+// --- Scan: extraction structurée d'étiquette par double passe IA --------------
 //
-// L'endpoint POST /v1/scan reçoit une image (base64) et la confie au fournisseur
-// d'IA demandé (Mistral OCR, Gemini, …) qui renvoie les champs structurés de
-// l'étiquette. L'ajout d'un nouveau fournisseur se limite à implémenter
-// `scanProvider` et à l'enregistrer dans `newScanProviders`.
+// L'endpoint POST /v1/scan reçoit une image (base64) et lance EN PARALLÈLE tous
+// les fournisseurs de lecture configurés (passe 1 : Mistral OCR + Gemini). Les
+// résultats sont fusionnés champ par champ, puis une passe 2 (modèle texte, sans
+// image) DÉDUIT les champs absents de l'étiquette (couleur, type, région, pays,
+// cépages probables, fenêtre d'apogée). La passe 2 est best-effort : si elle
+// échoue, la passe 1 fusionnée est renvoyée telle quelle.
+//
+// L'ajout d'un fournisseur de lecture se limite à implémenter `scanProvider` et à
+// l'enregistrer dans `newScanProviders`.
 
-// ScanResult est la charge utile normalisée renvoyée à l'app, quel que soit le
-// fournisseur. Les champs vides sont omis pour alléger la réponse.
+// ScanResult est la charge utile normalisée renvoyée à l'app. La frontière entre
+// champs LUS (passe 1) et champs DÉDUITS (passe 2 / DB locale) est explicite :
+// `inferredFields` liste les clés JSON produites par déduction. Les champs vides
+// sont omis pour alléger la réponse.
 type ScanResult struct {
+	// --- LU sur l'étiquette (passe 1, fusion mistral+gemini) -------------
 	Producer    string   `json:"producer,omitempty"`
 	WineName    string   `json:"wineName,omitempty"`
 	Vintage     int      `json:"vintage,omitempty"`
@@ -32,11 +41,28 @@ type ScanResult struct {
 	Grapes      []string `json:"grapes,omitempty"`
 	Format      string   `json:"format,omitempty"`
 	ABV         string   `json:"abv,omitempty"`
-	Provider    string   `json:"provider"`
+
+	// --- DÉDUIT (passe 2 / DB locale, jamais lu directement) ------------
+	Color       string   `json:"color,omitempty"`    // red|white|rose|sparkling|sweet|fortified|orange (WineColor.rawValue)
+	WineType    string   `json:"wineType,omitempty"` // still|sparkling|fortified|sweet (WineType.rawValue)
+	Country     string   `json:"country,omitempty"`
+	Region      string   `json:"region,omitempty"`
+	GrapesGuess []string `json:"grapesGuess,omitempty"` // cépages PROBABLES de l'appellation (hors `grapes` lus)
+	PeakFrom    int      `json:"peakFrom,omitempty"`    // début fenêtre d'apogée (année civile)
+	Peak        int      `json:"peak,omitempty"`        // apogée idéale (si fenêtre locale)
+	PeakTo      int      `json:"peakTo,omitempty"`      // fin fenêtre d'apogée
+
+	// --- Méta -----------------------------------------------------------
+	Provider       string   `json:"provider"`                 // ex. "mistral+gemini"
+	InferredFields []string `json:"inferredFields,omitempty"` // clés JSON ci-dessus produites par déduction
 }
 
 // scanRequest est le corps JSON attendu sur POST /v1/scan.
 type scanRequest struct {
+	// Deprecated: ignoré. On lance toujours tous les fournisseurs configurés
+	// (mistral+gemini). Conservé pour la rétro-compatibilité des anciens clients
+	// qui envoient encore "provider":"mistral" ; encoding/json ignore de toute
+	// façon les clés inconnues.
 	Provider string `json:"provider"`
 	Image    string `json:"image"`    // base64 brut (sans préfixe data:)
 	MimeType string `json:"mimeType"` // ex. "image/jpeg" ; défaut image/jpeg
@@ -73,8 +99,30 @@ func newScanProviders() map[string]scanProvider {
 	return providers
 }
 
+// pass1Order fixe l'ordre déterministe des fournisseurs de lecture. Il sert aussi
+// de priorité de tie-break dans la fusion (le premier l'emporte à valeur égale) :
+// Mistral OCR d'abord car il lit les chiffres et accents littéralement.
+var pass1Order = []string{"mistral", "gemini"}
+
+const (
+	pass1Timeout = 35 * time.Second // budget par fournisseur image (passe 1)
+	pass2Timeout = 12 * time.Second // budget de l'appel texte (passe 2)
+	scanBudget   = 50 * time.Second // budget total du handler
+)
+
+// errNoScanProvider signale qu'aucun fournisseur de lecture n'est configuré.
+var errNoScanProvider = errors.New("aucun fournisseur de scan configuré")
+
+// providerResult porte le résultat (ou l'erreur) d'un fournisseur de la passe 1.
+type providerResult struct {
+	name   string
+	result ScanResult
+	err    error
+}
+
 // handleScan traite POST /v1/scan : vérifie le secret partagé, limite le débit,
-// sélectionne le fournisseur et renvoie le résultat normalisé.
+// lance la passe 1 en parallèle, fusionne, applique la passe 2 (best-effort) et
+// renvoie le résultat normalisé. Le champ req.Provider est ignoré (déprécié).
 func (s *server) handleScan(w http.ResponseWriter, r *http.Request) {
 	if !checkScanSecret(r) {
 		writeError(w, http.StatusUnauthorized, "clé d'accès invalide")
@@ -99,37 +147,77 @@ func (s *server) handleScan(w http.ResponseWriter, r *http.Request) {
 		mime = "image/jpeg"
 	}
 
-	provider, ok := s.scanProviders[strings.ToLower(strings.TrimSpace(req.Provider))]
-	if !ok {
-		writeError(w, http.StatusBadRequest, "fournisseur inconnu (attendu: mistral, gemini)")
-		return
-	}
-	if !provider.configured() {
-		writeError(w, http.StatusServiceUnavailable,
-			fmt.Sprintf("le fournisseur %q n'est pas configuré sur le serveur", provider.name()))
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), scanBudget)
 	defer cancel()
 
-	result, err := provider.scan(ctx, req.Image, mime)
-	if err != nil {
-		s.logger.Error("scan provider failed", "provider", provider.name(), "error", err)
-		writeError(w, http.StatusBadGateway, "le fournisseur d'IA n'a pas pu analyser l'image")
+	// --- PASSE 1 (parallèle) ---
+	pass1, err := s.runPass1(ctx, req.Image, mime)
+	if errors.Is(err, errNoScanProvider) {
+		writeError(w, http.StatusServiceUnavailable, "le scan IA n'est pas configuré sur le serveur")
 		return
 	}
-	result.Provider = provider.name()
-	// Trace le moteur réellement utilisé et un aperçu non sensible du résultat
-	// (l'image et le texte d'étiquette ne sont jamais journalisés).
+
+	ok := make([]ScanResult, 0, len(pass1))
+	var failed []string
+	for _, pr := range pass1 {
+		if pr.err != nil {
+			failed = append(failed, pr.name)
+			s.logger.Warn("scan provider failed", "provider", pr.name, "error", pr.err)
+			continue
+		}
+		ok = append(ok, pr.result)
+	}
+	if len(ok) == 0 {
+		writeError(w, http.StatusBadGateway, "le scan IA n'a pas pu analyser l'image")
+		return
+	}
+	result := mergePass1(ok) // result.Provider = "mistral+gemini" (ou le survivant)
+
+	// --- PASSE 2 (best-effort, ne renvoie jamais d'erreur) ---
+	result = s.applyPass2(ctx, result)
+
+	// Trace non sensible : ni l'image ni le texte d'étiquette ne sont journalisés.
 	s.logger.Info("scan ok",
-		"provider", provider.name(),
+		"providers", result.Provider,
+		"degraded", len(failed) > 0,
 		"vintage", result.Vintage,
 		"hasProducer", result.Producer != "",
-		"hasWineName", result.WineName != "",
-		"grapes", len(result.Grapes),
+		"color", result.Color,
+		"inferred", len(result.InferredFields),
 	)
 	writeJSON(w, http.StatusOK, result)
+}
+
+// runPass1 lance en parallèle tous les fournisseurs de lecture configurés (selon
+// pass1Order) et renvoie un résultat par fournisseur. Chaque goroutine écrit dans
+// son propre index out[i] : aucune course. La fusion se fait après wg.Wait().
+// Renvoie errNoScanProvider si aucun fournisseur n'est configuré.
+func (s *server) runPass1(ctx context.Context, image, mime string) ([]providerResult, error) {
+	providers := make([]scanProvider, 0, len(pass1Order))
+	for _, n := range pass1Order {
+		if p, ok := s.scanProviders[n]; ok && p.configured() {
+			providers = append(providers, p)
+		}
+	}
+	if len(providers) == 0 {
+		return nil, errNoScanProvider
+	}
+
+	out := make([]providerResult, len(providers))
+	var wg sync.WaitGroup
+	for i, p := range providers {
+		wg.Add(1)
+		go func(i int, p scanProvider) {
+			defer wg.Done()
+			pctx, cancel := context.WithTimeout(ctx, pass1Timeout)
+			defer cancel()
+			res, err := p.scan(pctx, image, mime)
+			res.Provider = p.name()
+			out[i] = providerResult{name: p.name(), result: res, err: err}
+		}(i, p)
+	}
+	wg.Wait()
+	return out, nil
 }
 
 // --- Sécurité & débit --------------------------------------------------------
@@ -192,8 +280,10 @@ func (l *rateLimiter) allow(key string) bool {
 	return true
 }
 
-// scanLimiter : 20 scans IA par minute et par IP (anti-abus opportuniste).
-var scanLimiter = newRateLimiter(20, time.Minute)
+// scanLimiter : 12 scans IA par minute et par IP. Abaissé de 20 à 12 car chaque
+// scan déclenche désormais 3 appels upstream payants (2 OCR passe 1 + 1 texte
+// passe 2) et reste une action volontaire mono-photo (pas de scan continu).
+var scanLimiter = newRateLimiter(12, time.Minute)
 
 // --- Décodage tolérant de la sortie du modèle --------------------------------
 

@@ -74,9 +74,10 @@ type EnrichResult struct {
 // --- Server -----------------------------------------------------------------
 
 type server struct {
-	db            *sql.DB
-	logger        *slog.Logger
-	scanProviders map[string]scanProvider
+	db              *sql.DB
+	logger          *slog.Logger
+	scanProviders   map[string]scanProvider // passe 1 : lecture d'image (OCR/vision)
+	enrichProviders []enrichProvider        // passe 2 : déduction texte (primaire → repli)
 }
 
 func main() {
@@ -99,7 +100,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &server{db: db, logger: logger, scanProviders: newScanProviders()}
+	srv := &server{
+		db:              db,
+		logger:          logger,
+		scanProviders:   newScanProviders(),
+		enrichProviders: newEnrichProviders(),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", srv.handleHome)
@@ -129,8 +135,10 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		// 75s borne la durée totale du handler /v1/scan : budget 50s (passe 1
+		// parallèle 35s + passe 2 12s) + marge réseau/encodage.
+		WriteTimeout: 75 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	logger.Info("caveos-server starting", "addr", addr)

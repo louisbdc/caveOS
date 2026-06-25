@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -64,17 +65,20 @@ func TestHandleScanRejectsBadSecret(t *testing.T) {
 	}
 }
 
-func TestHandleScanUnknownProvider(t *testing.T) {
+// Le champ "provider" est déprécié et ignoré : un ancien client qui l'envoie (ou
+// envoie une valeur inconnue) déclenche quand même la passe 1 et obtient 200.
+func TestHandleScanIgnoresProviderField(t *testing.T) {
 	srv := newTestServer(fakeProvider{nm: "mistral", conf: true})
 	rec := postScan(t, srv, `{"provider":"openai","image":"abc"}`, nil)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("attendu 400, obtenu %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200 (provider ignoré), obtenu %d", rec.Code)
 	}
 }
 
-func TestHandleScanProviderNotConfigured(t *testing.T) {
+// Aucun fournisseur de lecture configuré ⇒ 503.
+func TestHandleScanNoProviderConfigured(t *testing.T) {
 	srv := newTestServer(fakeProvider{nm: "gemini", conf: false})
-	rec := postScan(t, srv, `{"provider":"gemini","image":"abc"}`, nil)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("attendu 503, obtenu %d", rec.Code)
 	}
@@ -88,12 +92,13 @@ func TestHandleScanMissingImage(t *testing.T) {
 	}
 }
 
+// Deux fournisseurs en succès ⇒ provider concaténé "mistral+gemini".
 func TestHandleScanSuccessSetsProvider(t *testing.T) {
-	srv := newTestServer(fakeProvider{
-		nm: "mistral", conf: true,
-		result: ScanResult{Producer: "Château Test", Vintage: 2015},
-	})
-	rec := postScan(t, srv, `{"provider":"mistral","image":"abc"}`, nil)
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true, result: ScanResult{Producer: "Château Test"}},
+		fakeProvider{nm: "gemini", conf: true, result: ScanResult{Producer: "Château Test"}},
+	)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("attendu 200, obtenu %d", rec.Code)
 	}
@@ -101,8 +106,100 @@ func TestHandleScanSuccessSetsProvider(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("réponse illisible: %v", err)
 	}
-	if got.Provider != "mistral" || got.Producer != "Château Test" || got.Vintage != 2015 {
+	if got.Provider != "mistral+gemini" || got.Producer != "Château Test" {
 		t.Fatalf("résultat inattendu: %+v", got)
+	}
+}
+
+// La passe 1 fusionne les champs complémentaires des deux fournisseurs et
+// concatène les noms. Millésime 0 ⇒ la passe 2 locale (DB) est court-circuitée.
+func TestHandleScanRunsBothProviders(t *testing.T) {
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true, result: ScanResult{
+			Producer: "Château Margaux", Grapes: []string{"Merlot"},
+		}},
+		fakeProvider{nm: "gemini", conf: true, result: ScanResult{
+			Appellation: "Margaux", Grapes: []string{"Cabernet Sauvignon"},
+		}},
+	)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200, obtenu %d", rec.Code)
+	}
+	var got ScanResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("réponse illisible: %v", err)
+	}
+	if got.Provider != "mistral+gemini" {
+		t.Fatalf("provider attendu mistral+gemini, obtenu %q", got.Provider)
+	}
+	if got.Producer != "Château Margaux" || got.Appellation != "Margaux" {
+		t.Fatalf("fusion incomplète: %+v", got)
+	}
+	if len(got.Grapes) != 2 {
+		t.Fatalf("union des cépages attendue (2), obtenu %v", got.Grapes)
+	}
+}
+
+// Un fournisseur échoue, l'autre réussit ⇒ 200 avec les données du survivant et
+// son nom seul dans provider.
+func TestHandleScanOneProviderFails(t *testing.T) {
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true, err: errors.New("OCR indisponible")},
+		fakeProvider{nm: "gemini", conf: true, result: ScanResult{Producer: "Domaine Survivant"}},
+	)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200, obtenu %d", rec.Code)
+	}
+	var got ScanResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("réponse illisible: %v", err)
+	}
+	if got.Provider != "gemini" || got.Producer != "Domaine Survivant" {
+		t.Fatalf("résultat inattendu: %+v", got)
+	}
+}
+
+// Tous les fournisseurs configurés échouent ⇒ 502.
+func TestHandleScanBothFail(t *testing.T) {
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true, err: errors.New("boom")},
+		fakeProvider{nm: "gemini", conf: true, err: errors.New("boom")},
+	)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("attendu 502, obtenu %d", rec.Code)
+	}
+}
+
+// Handler double-passe complet : la passe 2 enrichit la réponse JSON avec les
+// champs déduits et inferredFields. Utilise newTestServerFull + fakeEnrichProvider
+// (helpers définis dans scan_enrich_test.go). Vintage 0 ⇒ pas d'accès DB.
+func TestHandleScanIncludesInferredFields(t *testing.T) {
+	srv := newTestServerFull(
+		[]scanProvider{
+			fakeProvider{nm: "mistral", conf: true, result: ScanResult{Producer: "Domaine X"}},
+			fakeProvider{nm: "gemini", conf: true, result: ScanResult{Producer: "Domaine X"}},
+		},
+		[]enrichProvider{fakeEnrichProvider{
+			nm: "gemini", conf: true,
+			out: enrichOutput{Color: "red", Region: "Bordeaux"},
+		}},
+	)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200, obtenu %d", rec.Code)
+	}
+	var got ScanResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("réponse illisible: %v", err)
+	}
+	if got.Provider != "mistral+gemini" || got.Color != "red" || got.Region != "Bordeaux" {
+		t.Fatalf("résultat double-passe inattendu: %+v", got)
+	}
+	if !containsString(got.InferredFields, "color") || !containsString(got.InferredFields, "region") {
+		t.Fatalf("inferredFields incomplet: %v", got.InferredFields)
 	}
 }
 
