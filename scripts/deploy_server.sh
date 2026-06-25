@@ -16,7 +16,11 @@ echo "==> Préparation du dossier distant"
 $SSH "mkdir -p $REMOTE_DIR"
 
 echo "==> Copie des sources du serveur (le fichier .env du VPS n'est jamais copié)"
-$SCP server/go.mod server/main.go server/pages.go server/seed.json server/README.md server/caveos-server.service \
+# Tous les .go de production sont copiés automatiquement ; les *_test.go restent
+# locaux (non nécessaires en prod). Ajouter un nouveau fichier .go ne demande
+# donc aucune modification de ce script.
+GO_SOURCES=$(ls server/*.go | grep -v '_test\.go$')
+$SCP $GO_SOURCES server/go.mod server/seed.json server/README.md server/caveos-server.service \
      "$VPS_USER@$VPS_HOST:$REMOTE_DIR/"
 # go.sum si présent
 [ -f server/go.sum ] && $SCP server/go.sum "$VPS_USER@$VPS_HOST:$REMOTE_DIR/" || true

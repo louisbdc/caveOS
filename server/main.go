@@ -74,8 +74,9 @@ type EnrichResult struct {
 // --- Server -----------------------------------------------------------------
 
 type server struct {
-	db     *sql.DB
-	logger *slog.Logger
+	db            *sql.DB
+	logger        *slog.Logger
+	scanProviders map[string]scanProvider
 }
 
 func main() {
@@ -98,7 +99,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &server{db: db, logger: logger}
+	srv := &server{db: db, logger: logger, scanProviders: newScanProviders()}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", srv.handleHome)
@@ -110,6 +111,7 @@ func main() {
 	mux.HandleFunc("GET /v1/regions", srv.handleRegions)
 	mux.HandleFunc("GET /v1/appellations", srv.handleAppellations)
 	mux.HandleFunc("GET /v1/enrich", srv.handleEnrich)
+	mux.HandleFunc("POST /v1/scan", srv.handleScan)
 	mux.HandleFunc("GET /v1/barcode", srv.handleBarcode)
 	mux.HandleFunc("GET /v1/db/latest", srv.handleDBLatest)
 	mux.HandleFunc("GET /credits", srv.handleCredits)
@@ -618,8 +620,8 @@ func (s *server) matchGrape(lower string) (Grape, bool) {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CaveOS-Key")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

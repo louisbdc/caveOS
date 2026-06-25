@@ -8,8 +8,9 @@ Le VPS héberge ce service. L'app iOS reste **offline-first** (CloudKit pour la 
 
 - **Go modules**, stdlib `net/http` (pas de framework lourd).
 - **SQLite pur-Go** via `modernc.org/sqlite` (**PAS de CGO**) → binaire statique.
-- Logs structurés (`log/slog`, JSON), middleware de log et CORS permissif (GET).
+- Logs structurés (`log/slog`, JSON), middleware de log et CORS permissif (GET + POST).
 - Au démarrage : ouvre/crée `wine.db`, crée les tables si absentes, seed depuis `seed.json` si la base est vide.
+- **Scan d'étiquette par IA** (`POST /v1/scan`) : proxy multi-fournisseurs (Mistral OCR, Google Gemini) ; les clés d'API restent côté serveur (`.env`).
 
 ## Build & Run
 
@@ -50,6 +51,7 @@ Tous les endpoints renvoient du JSON (sauf `/v1/db/latest` et `/credits`).
 | GET | `/v1/regions` | Liste complète des régions. |
 | GET | `/v1/appellations` | Liste complète des appellations. |
 | GET | `/v1/enrich?name=...&vintage=YYYY` | Heuristique d'apogée. Renvoie `{drinkFrom,peak,drinkBy,...}`. |
+| POST | `/v1/scan` | Scan d'étiquette par IA. Body `{provider,image,mimeType}`. Renvoie les champs structurés (voir ci-dessous). |
 | GET | `/v1/db/latest` | Sert `wine.db` (`application/octet-stream`) pour distribution hors-ligne. |
 | GET | `/credits` | Texte d'attribution des licences (Wikidata CC0, INAO Licence Ouverte, LWIN CC). |
 
@@ -65,6 +67,50 @@ Multiplicateur par tier de qualité de région : tier 3 → ×1.3, tier 2 → ×
 
 C'est la **même heuristique** que celle embarquée dans l'app iOS.
 
+### Scan d'étiquette par IA (`POST /v1/scan`)
+
+Reçoit une image (base64) et la confie au fournisseur d'IA demandé, qui renvoie les
+champs structurés de l'étiquette. L'app garde par défaut l'analyse 100 % locale
+(Apple Vision) ; ce mode IA est opt-in et réservé aux abonnés Pro côté app.
+
+**Requête** (`Content-Type: application/json`) :
+
+```json
+{
+  "provider": "mistral",          // ou "gemini"
+  "image": "<base64 de l'image>", // sans préfixe data:
+  "mimeType": "image/jpeg"        // optionnel, défaut image/jpeg
+}
+```
+
+**Réponse** (champs vides omis) :
+
+```json
+{
+  "producer": "Château Margaux",
+  "wineName": "Pavillon Rouge",
+  "vintage": 2015,
+  "appellation": "Margaux",
+  "grapes": ["Cabernet Sauvignon", "Merlot"],
+  "format": "75 cl",
+  "abv": "13,5 %",
+  "provider": "mistral"
+}
+```
+
+**Variables d'environnement** (fichier `.env` du VPS, chmod 600, hors git) :
+
+| Variable | Rôle |
+|---|---|
+| `MISTRAL_API_KEY` | Active le fournisseur `mistral`. Absente → `503` pour ce fournisseur. |
+| `GEMINI_API_KEY` | Active le fournisseur `gemini`. Absente → `503` pour ce fournisseur. |
+| `MISTRAL_OCR_MODEL` | Optionnel. Modèle Mistral (défaut `mistral-ocr-latest`). |
+| `GEMINI_MODEL` | Optionnel. Modèle Gemini (défaut `gemini-2.5-flash`). |
+| `CAVEOS_SCAN_KEY` | Optionnel. Secret partagé : si défini, l'en-tête `X-CaveOS-Key` est exigé. Absent → endpoint ouvert (pratique pour tester). |
+
+Ajouter un nouveau fournisseur = implémenter `scanProvider` et l'enregistrer dans
+`newScanProviders` (`scan.go`). Limite anti-abus : 20 requêtes/minute par IP.
+
 ### Exemples
 
 ```sh
@@ -73,6 +119,12 @@ curl 'http://localhost:8080/v1/wines/search?q=saint'
 curl 'http://localhost:8080/v1/enrich?name=Barolo%20Nebbiolo&vintage=2018'
 curl -O 'http://localhost:8080/v1/db/latest'
 curl 'http://localhost:8080/credits'
+
+# Scan IA (image encodée en base64)
+B64=$(base64 -i etiquette.jpg)
+curl -X POST 'http://localhost:8080/v1/scan' \
+  -H 'Content-Type: application/json' \
+  -d "{\"provider\":\"mistral\",\"image\":\"$B64\",\"mimeType\":\"image/jpeg\"}"
 ```
 
 ## Déploiement (VPS, systemd)

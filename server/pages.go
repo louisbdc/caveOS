@@ -104,10 +104,22 @@ aucune de ces informations sur nos serveurs.</p>
 Apple sous votre compte. Elles ne transitent jamais par nous et restent soumises à la
 <a href="https://www.apple.com/legal/privacy/">politique de confidentialité d'Apple</a>.</p>
 
-<h2>Caméra</h2>
+<h2>Caméra et scan d'étiquette</h2>
 <p>CaveOS utilise la caméra uniquement pour scanner les étiquettes et codes-barres et pré-remplir une fiche.
-La reconnaissance est réalisée <b>entièrement sur l'appareil</b> (framework Vision d'Apple). Les images ne
-sont pas envoyées à un serveur ni conservées par l'éditeur.</p>
+Deux modes d'analyse existent :</p>
+<ul>
+<li><b>Analyse sur l'appareil (par défaut, gratuite)</b> — la reconnaissance est réalisée
+<b>entièrement sur votre appareil</b> (framework Vision d'Apple). Aucune image n'est envoyée à un serveur
+ni conservée par l'éditeur.</li>
+<li><b>Scan par IA (optionnel, réservé à CaveOS Pro)</b> — uniquement si vous le sélectionnez,
+la photo de l'étiquette est transmise de façon chiffrée à notre serveur, qui la confie à un
+<b>fournisseur d'IA tiers</b> que vous choisissez (Mistral AI ou Google Gemini), à la <b>seule fin
+d'en extraire les informations de l'étiquette</b> (domaine, cuvée, millésime, cépages…). Notre serveur
+ne conserve pas l'image après traitement. Le traitement réalisé par ces fournisseurs est régi par leurs
+propres conditions (<a href="https://mistral.ai/terms">Mistral AI</a>,
+<a href="https://ai.google.dev/gemini-api/terms">Google</a>) ; nous vous invitons à en prendre connaissance
+avant d'activer ce mode.</li>
+</ul>
 
 <h2>Données de référence sur le vin</h2>
 <p>L'app peut interroger notre service pour rechercher des cépages, régions et appellations, ou estimer une

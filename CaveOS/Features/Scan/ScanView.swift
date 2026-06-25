@@ -45,6 +45,15 @@ struct ScanView: View {
     @State private var scanFeedback: String?
     @State private var cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
 
+    // Moteur d'analyse choisi (Appareil / IA), persisté.
+    @AppStorage(ScanEngine.storageKey) private var scanEngine = ScanEngine.device
+    // Dernière photo importée, conservée pour réanalyse au changement de moteur.
+    @State private var lastImage: UIImage?
+    // Indique que l'IA a échoué et que l'analyse locale a pris le relais.
+    @State private var usedFallback = false
+    // Moteur ayant réellement produit la dernière analyse (≠ moteur sélectionné si fallback).
+    @State private var analysisSource: ScanEngine?
+
     var body: some View {
         NavigationStack {
             Group {
@@ -106,6 +115,8 @@ struct ScanView: View {
     @ViewBuilder
     private var controls: some View {
         VStack(spacing: Theme.Spacing.m) {
+            enginePicker
+
             HStack(spacing: Theme.Spacing.m) {
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     Label("Importer une photo", systemImage: "photo")
@@ -144,6 +155,39 @@ struct ScanView: View {
             guard let newValue else { return }
             Task { await processPhoto(newValue) }
         }
+        .onChange(of: scanEngine) { _, newValue in
+            // Un moteur d'IA est réservé Pro : on bloque la sélection et propose Pro.
+            if newValue.isAI && !store.isPro {
+                scanEngine = .device
+                showPaywall = true
+                return
+            }
+            // Réanalyse la dernière photo avec le nouveau moteur, si disponible.
+            if let image = lastImage {
+                Task { await analyzeImage(image) }
+            }
+        }
+    }
+
+    // MARK: - Sélecteur de moteur
+
+    @ViewBuilder
+    private var enginePicker: some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            Picker("Moteur d'analyse", selection: $scanEngine) {
+                ForEach(ScanEngine.allCases) { engine in
+                    Text(engine.label).tag(engine)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(scanEngine.isAI
+                ? "L'IA analyse une photo importée (réservé Pro)."
+                : "Analyse sur l'appareil, hors-ligne.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     // MARK: - Récapitulatif éditable
@@ -152,6 +196,12 @@ struct ScanView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text("Champs détectés")
                 .font(.headline)
+
+            if let analysisSource {
+                Label(analysisSource.analysisLabel, systemImage: analysisSource.systemImage)
+                    .font(.caption)
+                    .foregroundStyle(analysisSource.isAI ? Theme.gold : .secondary)
+            }
 
             labeledField("Domaine", text: $producer)
             labeledField("Cuvée", text: $wineName)
@@ -261,6 +311,14 @@ struct ScanView: View {
             knownAppellations: knownAppellations,
             knownGrapes: knownGrapes
         )
+        // Reconnaissance Apple Vision : l'analyse provient bien de l'appareil.
+        analysisSource = .device
+        applyAnalyzedLabel(label)
+    }
+
+    /// Applique un label analysé (local ou IA) aux champs éditables et calcule le
+    /// message de retour adéquat.
+    private func applyAnalyzedLabel(_ label: ScannedLabel) {
         applyToFields(label)
         hasAnalyzed = true
 
@@ -271,9 +329,14 @@ struct ScanView: View {
             && (label.appellation ?? "").isEmpty
             && label.grapes.isEmpty
             && (scannedEAN ?? "").isEmpty
-        scanFeedback = nothingDetected
-            ? "Aucune information détectée. Rapprochez l'étiquette, améliorez l'éclairage et réessayez — ou complétez les champs à la main."
-            : nil
+
+        if nothingDetected {
+            scanFeedback = "Aucune information détectée. Rapprochez l'étiquette, améliorez l'éclairage et réessayez — ou complétez les champs à la main."
+        } else if usedFallback {
+            scanFeedback = "Analyse effectuée hors-ligne sur l'appareil (IA indisponible)."
+        } else {
+            scanFeedback = nil
+        }
     }
 
     private func applyToFields(_ label: ScannedLabel) {
@@ -321,13 +384,47 @@ struct ScanView: View {
 
         do {
             guard let data = try await item.loadTransferable(type: Data.self),
-                  let uiImage = UIImage(data: data),
-                  let cgImage = uiImage.cgImage else {
+                  let uiImage = UIImage(data: data) else {
                 scanFeedback = "Impossible de charger cette image. Réessayez avec une autre photo."
                 return
             }
-            // Redresse l'étiquette (courbe/inclinée) avant l'OCR pour fiabiliser la lecture.
-            let prepared = await perspectiveCorrected(cgImage)
+            lastImage = uiImage
+            await analyzeImage(uiImage)
+        } catch {
+            scanFeedback = "L'analyse de la photo a échoué. Réessayez avec une image plus nette."
+        }
+    }
+
+    /// Analyse une image selon le moteur choisi. En mode IA (Pro), délègue au
+    /// serveur ; en cas d'échec réseau, bascule automatiquement sur l'OCR local.
+    private func analyzeImage(_ uiImage: UIImage) async {
+        usedFallback = false
+
+        if scanEngine.isAI, store.isPro, let provider = scanEngine.providerKey {
+            do {
+                let label = try await AIScanService.scan(image: uiImage, provider: provider)
+                recognizedLines = label.rawLines
+                analysisSource = scanEngine
+                applyAnalyzedLabel(label)
+                return
+            } catch {
+                // Fallback silencieux vers l'analyse embarquée.
+                usedFallback = true
+            }
+        }
+
+        await analyzeLocally(uiImage)
+    }
+
+    /// Analyse 100 % locale : correction de perspective + OCR Apple Vision + parsing.
+    private func analyzeLocally(_ uiImage: UIImage) async {
+        guard let cgImage = uiImage.cgImage else {
+            scanFeedback = "Impossible d'analyser cette image. Réessayez avec une autre photo."
+            return
+        }
+        // Redresse l'étiquette (courbe/inclinée) avant l'OCR pour fiabiliser la lecture.
+        let prepared = await perspectiveCorrected(cgImage)
+        do {
             let lines = try await recognizeText(in: prepared)
             recognizedLines = lines
             analyze(lines: lines)
