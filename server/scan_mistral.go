@@ -45,8 +45,9 @@ var mistralLabelSchema = map[string]any{
 		"grapes":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		"format":      map[string]any{"type": "string"},
 		"abv":         map[string]any{"type": "string"},
+		"isWineLabel": map[string]any{"type": "boolean"},
 	},
-	"required":             labelFields,
+	"required":             append(append([]string{}, labelFields...), "isWineLabel"),
 	"additionalProperties": false,
 }
 

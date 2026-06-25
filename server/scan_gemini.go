@@ -45,6 +45,7 @@ var geminiLabelSchema = map[string]any{
 		"grapes":      map[string]any{"type": "ARRAY", "items": map[string]any{"type": "STRING"}},
 		"format":      map[string]any{"type": "STRING"},
 		"abv":         map[string]any{"type": "STRING"},
+		"isWineLabel": map[string]any{"type": "BOOLEAN"},
 	},
 	"propertyOrdering": labelFields,
 }

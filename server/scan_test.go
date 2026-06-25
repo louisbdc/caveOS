@@ -302,3 +302,75 @@ func TestRateLimiter(t *testing.T) {
 		t.Fatal("une autre IP doit avoir son propre quota")
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestHandleScanReturnsEmptyWhenNoWineLabel(t *testing.T) {
+	// Les deux fournisseurs disent explicitement « pas une étiquette de vin » :
+	// le handler doit renvoyer 200 avec un résultat VIDE (anti-hallucination),
+	// jamais le vin que le modèle aurait inventé.
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true,
+			result: ScanResult{Producer: "Château Inventé", Vintage: 2018, IsWineLabel: boolPtr(false)}},
+		fakeProvider{nm: "gemini", conf: true,
+			result: ScanResult{Producer: "Domaine Hallucination", IsWineLabel: boolPtr(false)}},
+	)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200, obtenu %d", rec.Code)
+	}
+	var got ScanResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("réponse illisible: %v", err)
+	}
+	if got.Producer != "" || got.Vintage != 0 {
+		t.Fatalf("résultat devait être vide (anti-hallucination), obtenu: %+v", got)
+	}
+}
+
+func TestHandleScanKeepsResultWhenOneProviderSeesLabel(t *testing.T) {
+	// Un seul fournisseur reconnaît une étiquette → on garde le résultat fusionné.
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true,
+			result: ScanResult{Producer: "Château Réel", Vintage: 2015, IsWineLabel: boolPtr(true)}},
+		fakeProvider{nm: "gemini", conf: true,
+			result: ScanResult{IsWineLabel: boolPtr(false)}},
+	)
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200, obtenu %d", rec.Code)
+	}
+	var got ScanResult
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.Producer != "Château Réel" {
+		t.Fatalf("résultat réel attendu, obtenu: %+v", got)
+	}
+}
+
+func TestClientIPUsesRightmostForwarded(t *testing.T) {
+	// IP falsifiée en tête par le client ; le proxy de confiance ajoute la vraie à
+	// droite. clientIP doit retenir la dernière (réelle), pas la première (spoof).
+	req := httptest.NewRequest(http.MethodPost, "/v1/scan", nil)
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 203.0.113.7")
+	if got := clientIP(req); got != "203.0.113.7" {
+		t.Fatalf("clientIP = %q, attendu 203.0.113.7", got)
+	}
+}
+
+func TestHandleScanRejectsUnusableImageUpfront(t *testing.T) {
+	// Image 1x1 (inexploitable) + garde-fou activé : réponse vide et les
+	// fournisseurs ne sont jamais appelés (ni hallucination, ni appel payant).
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true, result: ScanResult{Producer: "Château Inventé"}},
+	)
+	srv.imageUnusable = isUnusableImage
+	rec := postScan(t, srv, `{"image":"`+tinyImageB64(t)+`"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200, obtenu %d", rec.Code)
+	}
+	var got ScanResult
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.Producer != "" {
+		t.Fatalf("résultat devait être vide (garde-fou image), obtenu: %+v", got)
+	}
+}

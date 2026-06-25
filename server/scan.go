@@ -55,6 +55,11 @@ type ScanResult struct {
 	// --- Méta -----------------------------------------------------------
 	Provider       string   `json:"provider"`                 // ex. "mistral+gemini"
 	InferredFields []string `json:"inferredFields,omitempty"` // clés JSON ci-dessus produites par déduction
+
+	// IsWineLabel : le fournisseur a-t-il reconnu une étiquette de vin lisible ?
+	// Interne (jamais sérialisé), sert au garde-fou anti-hallucination du handler.
+	// nil = non renseigné par le fournisseur (on suppose alors une étiquette).
+	IsWineLabel *bool `json:"-"`
 }
 
 // scanRequest est le corps JSON attendu sur POST /v1/scan.
@@ -84,8 +89,11 @@ var labelFields = []string{"producer", "wineName", "vintage", "appellation", "gr
 const labelInstruction = "Tu analyses la photo d'une étiquette de bouteille de vin. " +
 	"Extrais les champs suivants en respectant strictement le schéma JSON fourni : " +
 	"producer (domaine/château), wineName (nom de la cuvée), vintage (millésime, année sur 4 chiffres en entier), " +
-	"appellation, grapes (liste des cépages), format (ex. \"75 cl\", \"Magnum (1,5 L)\"), abv (degré, ex. \"13,5 %\"). " +
-	"Laisse un champ vide (ou 0 pour vintage) si l'information est absente. N'invente jamais de valeur."
+	"appellation, grapes (liste des cépages), format (ex. \"75 cl\", \"Magnum (1,5 L)\"), abv (degré, ex. \"13,5 %\"), " +
+	"isWineLabel (true UNIQUEMENT si l'image montre réellement une étiquette de vin lisible). " +
+	"Laisse un champ vide (ou 0 pour vintage) si l'information est absente. N'invente jamais de valeur. " +
+	"Si l'image est illisible, floue, vide, ou n'est pas une étiquette de vin, mets isWineLabel=false et laisse " +
+	"TOUS les autres champs vides — n'invente JAMAIS un vin connu (par ex. ne réponds pas \"Château Margaux\")."
 
 // --- Handler -----------------------------------------------------------------
 
@@ -147,6 +155,15 @@ func (s *server) handleScan(w http.ResponseWriter, r *http.Request) {
 		mime = "image/jpeg"
 	}
 
+	// Garde-fou anti-hallucination en amont : une image minuscule, vide ou unie
+	// fait inventer un vin connu aux modèles (et ils s'en disent confiants). On
+	// répond directement un résultat vide, sans appel upstream.
+	if s.imageUnusable != nil && s.imageUnusable(req.Image) {
+		s.logger.Info("scan: image inexploitable (trop petite ou unie) — analyse ignorée")
+		writeJSON(w, http.StatusOK, ScanResult{})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), scanBudget)
 	defer cancel()
 
@@ -171,6 +188,25 @@ func (s *server) handleScan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "le scan IA n'a pas pu analyser l'image")
 		return
 	}
+	// --- Garde-fou anti-hallucination ---
+	// Si AUCUN fournisseur n'a reconnu une étiquette de vin lisible (tous renvoient
+	// explicitement isWineLabel=false), on ne renvoie pas un vin inventé : on répond
+	// un résultat vide et l'app affiche « aucune information détectée ».
+	names := make([]string, 0, len(ok))
+	labelSeen := false
+	for _, r := range ok {
+		names = append(names, r.Provider)
+		if r.IsWineLabel == nil || *r.IsWineLabel {
+			labelSeen = true
+		}
+	}
+	provider := strings.Join(names, "+")
+	if !labelSeen {
+		s.logger.Info("scan: aucune étiquette de vin lisible détectée", "providers", provider)
+		writeJSON(w, http.StatusOK, ScanResult{Provider: provider})
+		return
+	}
+
 	result := mergePass1(ok) // result.Provider = "mistral+gemini" (ou le survivant)
 
 	// --- PASSE 2 (best-effort, ne renvoie jamais d'erreur) ---
@@ -236,11 +272,15 @@ func checkScanSecret(r *http.Request) bool {
 // clientIP extrait l'IP de l'appelant (X-Forwarded-For en priorité derrière un
 // reverse-proxy, sinon RemoteAddr).
 func clientIP(r *http.Request) string {
+	// Derrière notre unique reverse-proxy de confiance : on prend la DERNIÈRE entrée
+	// de X-Forwarded-For (celle ajoutée par le proxy = l'IP réellement vue par lui).
+	// Les entrées de gauche sont fournies par le client, donc falsifiables : les lire
+	// laisserait contourner le rate-limit en variant l'en-tête à chaque requête.
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		if i := strings.IndexByte(fwd, ','); i >= 0 {
-			return strings.TrimSpace(fwd[:i])
+		parts := strings.Split(fwd, ",")
+		if last := strings.TrimSpace(parts[len(parts)-1]); last != "" {
+			return last
 		}
-		return strings.TrimSpace(fwd)
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -297,6 +337,7 @@ type aiLabel struct {
 	Grapes      []string `json:"grapes"`
 	Format      string   `json:"format"`
 	ABV         string   `json:"abv"`
+	IsWineLabel *bool    `json:"isWineLabel"`
 }
 
 // anyToString réduit une valeur JSON décodée (json.Number, string, float64, nil)
@@ -332,6 +373,7 @@ func (l aiLabel) toResult() ScanResult {
 		Grapes:      grapes,
 		Format:      strings.TrimSpace(l.Format),
 		ABV:         strings.TrimSpace(l.ABV),
+		IsWineLabel: l.IsWineLabel,
 	}
 }
 
