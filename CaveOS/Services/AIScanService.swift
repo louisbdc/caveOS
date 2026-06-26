@@ -99,9 +99,11 @@ enum AIScanService {
     private static let jpegQuality: CGFloat = 0.7
     private static let maxDimension: CGFloat = 1600
 
-    /// Clé d'accès partagée, lue depuis `Info.plist` (vide si non configurée).
-    private static var sharedKey: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CaveOSScanKey") as? String) ?? ""
+    /// Clé d'accès partagée, lue depuis `Info.plist` (`CaveOSScanKey`).
+    /// `nil` si la clé est absente ou vide.
+    static var scanKey: String? {
+        let raw = (Bundle.main.object(forInfoDictionaryKey: "CaveOSScanKey") as? String) ?? ""
+        return raw.isEmpty ? nil : raw
     }
 
     /// Analyse une image d'étiquette via le serveur CaveOS (Mistral + Gemini
@@ -112,7 +114,7 @@ enum AIScanService {
     /// - Returns: Les champs détectés (+ déduits) sous forme de `ScannedLabel`.
     /// - Throws: `AIScanError` en cas d'image invalide, d'erreur réseau ou de décodage.
     static func scan(image: UIImage) async throws -> ScannedLabel {
-        guard let jpeg = downscaledJPEG(image) else { throw AIScanError.invalidImage }
+        guard let jpeg = jpegData(for: image) else { throw AIScanError.invalidImage }
 
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AIScanError.invalidURL
@@ -128,8 +130,7 @@ enum AIScanService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let key = sharedKey
-        if !key.isEmpty {
+        if let key = scanKey {
             request.setValue(key, forHTTPHeaderField: "X-CaveOS-Key")
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -155,7 +156,8 @@ enum AIScanService {
     }
 
     /// Redimensionne (côté max ≤ `maxDimension`) puis encode l'image en JPEG.
-    private static func downscaledJPEG(_ image: UIImage) -> Data? {
+    /// Exposé `internal` pour être réutilisé par d'autres services (ex. `MenuScanService`).
+    static func jpegData(for image: UIImage) -> Data? {
         let size = image.size
         guard size.width > 0, size.height > 0 else { return nil }
 
