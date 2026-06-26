@@ -50,6 +50,14 @@ struct BottleBlueprintShape: Shape {
     }
 }
 
+/// Cadre rectangulaire portrait pour guider le cadrage d'une carte des vins
+/// (feuille à plat). Coins arrondis, proportionnel au `rect` fourni.
+struct DocumentBlueprintShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(roundedRect: rect, cornerRadius: Theme.Radius.l)
+    }
+}
+
 /// Zone d'étiquette indicative (tiers central bas du corps) pour guider le cadrage.
 struct LabelZoneShape: Shape {
     func path(in rect: CGRect) -> Path {

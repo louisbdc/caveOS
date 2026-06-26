@@ -97,7 +97,8 @@ struct MenuScanView: View {
                 proxy: captureProxy,
                 onCapture: { image in Task { await scan(image) } },
                 onImport: { showPhotoPicker = true },
-                cameraStatus: $cameraStatus
+                cameraStatus: $cameraStatus,
+                blueprint: .document
             )
 
             switch phase {

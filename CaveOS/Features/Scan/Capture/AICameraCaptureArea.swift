@@ -17,6 +17,10 @@ struct AICameraCaptureArea: View {
     let onImport: () -> Void
     @Binding var cameraStatus: AVAuthorizationStatus
 
+    /// Forme du gabarit de cadrage. Bouteille par défaut (scan d'étiquette) ;
+    /// `.document` pour le scan d'une carte des vins.
+    var blueprint: BlueprintShapeKind = .bottle
+
     @State private var phase: CapturePhase = .ready
     /// Session AVFoundation impossible (simulateur, caméra absente ou occupée).
     @State private var sessionUnavailable = false
@@ -62,7 +66,7 @@ struct AICameraCaptureArea: View {
 
             CameraCaptureView(proxy: proxy, onCapture: onCapture, onError: handleError)
 
-            BlueprintOverlay()
+            BlueprintOverlay(kind: blueprint)
 
             // Flash bref pendant la prise de vue (feedback anti double-tap).
             if phase == .capturing {
