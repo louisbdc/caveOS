@@ -125,6 +125,7 @@ func main() {
 	mux.HandleFunc("GET /v1/appellations", srv.handleAppellations)
 	mux.HandleFunc("GET /v1/enrich", srv.handleEnrich)
 	mux.HandleFunc("POST /v1/scan", srv.handleScan)
+	mux.HandleFunc("POST /v1/scan/list", srv.handleScanList)
 	mux.HandleFunc("GET /v1/barcode", srv.handleBarcode)
 	mux.HandleFunc("GET /v1/db/latest", srv.handleDBLatest)
 	mux.HandleFunc("GET /credits", srv.handleCredits)
@@ -142,9 +143,9 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		// 75s borne la durée totale du handler /v1/scan : budget 50s (passe 1
-		// parallèle 35s + passe 2 12s) + marge réseau/encodage.
-		WriteTimeout: 75 * time.Second,
+		// 100s borne la durée totale des handlers longs : /v1/scan (budget 50s) et
+		// /v1/scan/list (budget 90s) + marge réseau/encodage.
+		WriteTimeout: 100 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
