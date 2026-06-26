@@ -6,8 +6,7 @@ import Foundation
 /// de priorité :
 /// 1. Override manuel sur la `Bottle` (`apogee*Override`)
 /// 2. Override de base sur le `Wine` (`baseApogee*`)
-/// 3. Moyenne des profils de garde des cépages (`Grape.apogee*`)
-/// 4. Valeur par défaut (3, 8, 15)
+/// 3. Valeur par défaut (3, 8, 15)
 ///
 /// La fenêtre est ensuite ajustée par deux multiplicateurs :
 /// - le niveau de qualité de la région (`QualityTier.multiplier`)
@@ -23,14 +22,33 @@ enum ApogeeEngine {
         let drinkBy: Int
     }
 
-    /// Profil de garde de base, en années depuis le millésime.
-    private struct BaseProfile {
-        let min: Double
-        let peak: Double
-        let max: Double
+    private static let defaultProfile = (min: 3.0, peak: 8.0, max: 15.0)
+
+    // MARK: - Fonction pure
+
+    /// Calcule la fenêtre d'apogée (années absolues) à partir de champs bruts.
+    /// Renvoie `nil` si le millésime est absent ou nul.
+    ///
+    /// Utilisé pour les entrées sans `Bottle` (ex. carte de restaurant scannée).
+    /// Le profil de garde appliqué est le profil par défaut (3/8/15) car les
+    /// données d'apogée propres à chaque cépage ne sont pas accessibles depuis
+    /// leur seul nom.
+    static func window(
+        vintage: Int?,
+        grapes: [String],
+        regionTier: QualityTier?,
+        storage: StorageQuality
+    ) -> Window? {
+        guard let vintage, vintage > 0 else { return nil }
+        let factor = (regionTier?.multiplier ?? 1.0) * storage.multiplier
+        return Window(
+            drinkFrom: vintage + Int((defaultProfile.min * factor).rounded()),
+            peak: vintage + Int((defaultProfile.peak * factor).rounded()),
+            drinkBy: vintage + Int((defaultProfile.max * factor).rounded())
+        )
     }
 
-    private static let defaultProfile = BaseProfile(min: 3, peak: 8, max: 15)
+    // MARK: - Calcul depuis une Bottle
 
     /// Calcule la fenêtre d'apogée (années absolues) d'une bouteille.
     /// Renvoie `nil` si le millésime est absent ou nul (vin non millésimé).
@@ -40,17 +58,44 @@ enum ApogeeEngine {
     static func window(for bottle: Bottle) -> Window? {
         guard let vintage = bottle.vintage, vintage > 0 else { return nil }
 
-        let base = baseProfile(for: bottle)
-        let region = bottle.wine?.region?.qualityTier.multiplier ?? 1.0
-        let storage = bottle.storageQuality.multiplier
-        let factor = region * storage
+        let regionTier = bottle.wine?.region?.qualityTier
+        let storage = bottle.storageQuality
 
-        let drinkFrom = vintage + Int((base.min * factor).rounded())
-        let peak = vintage + Int((base.peak * factor).rounded())
-        let drinkBy = vintage + Int((base.max * factor).rounded())
+        // 1. Override manuel sur la bouteille (les trois doivent être présents).
+        if let min = bottle.apogeeMinOverride,
+           let peak = bottle.apogeePeakOverride,
+           let max = bottle.apogeeMaxOverride {
+            let factor = (regionTier?.multiplier ?? 1.0) * storage.multiplier
+            return Window(
+                drinkFrom: vintage + Int((Double(min) * factor).rounded()),
+                peak: vintage + Int((Double(peak) * factor).rounded()),
+                drinkBy: vintage + Int((Double(max) * factor).rounded())
+            )
+        }
 
-        return Window(drinkFrom: drinkFrom, peak: peak, drinkBy: drinkBy)
+        // 2. Override de base sur le vin.
+        if let wine = bottle.wine,
+           let min = wine.baseApogeeMin,
+           let peak = wine.baseApogeePeak,
+           let max = wine.baseApogeeMax {
+            let factor = (regionTier?.multiplier ?? 1.0) * storage.multiplier
+            return Window(
+                drinkFrom: vintage + Int((Double(min) * factor).rounded()),
+                peak: vintage + Int((Double(peak) * factor).rounded()),
+                drinkBy: vintage + Int((Double(max) * factor).rounded())
+            )
+        }
+
+        // 3. Branche calculée : délègue à la fonction pure (profil par défaut).
+        return window(
+            vintage: vintage,
+            grapes: bottle.wine?.grapes.map(\.name) ?? [],
+            regionTier: regionTier,
+            storage: storage
+        )
     }
+
+    // MARK: - Statut
 
     /// Détermine le statut d'apogée d'une bouteille à la date donnée.
     static func status(for bottle: Bottle, now: Date = .now) -> ApogeeStatus {
@@ -72,40 +117,5 @@ enum ApogeeEngine {
             return .drinkSoon
         }
         return .past
-    }
-
-    // MARK: - Profil de base
-
-    private static func baseProfile(for bottle: Bottle) -> BaseProfile {
-        // 1. Override manuel sur la bouteille (les trois doivent être présents).
-        if let min = bottle.apogeeMinOverride,
-           let peak = bottle.apogeePeakOverride,
-           let max = bottle.apogeeMaxOverride {
-            return BaseProfile(min: Double(min), peak: Double(peak), max: Double(max))
-        }
-
-        // 2. Override de base sur le vin.
-        if let wine = bottle.wine,
-           let min = wine.baseApogeeMin,
-           let peak = wine.baseApogeePeak,
-           let max = wine.baseApogeeMax {
-            return BaseProfile(min: Double(min), peak: Double(peak), max: Double(max))
-        }
-
-        // 3. Moyenne des cépages.
-        if let grapes = bottle.wine?.grapes, !grapes.isEmpty {
-            let count = Double(grapes.count)
-            let min = grapes.reduce(0) { $0 + $1.apogeeMin }
-            let peak = grapes.reduce(0) { $0 + $1.apogeePeak }
-            let max = grapes.reduce(0) { $0 + $1.apogeeMax }
-            return BaseProfile(
-                min: Double(min) / count,
-                peak: Double(peak) / count,
-                max: Double(max) / count
-            )
-        }
-
-        // 4. Valeur par défaut.
-        return defaultProfile
     }
 }
