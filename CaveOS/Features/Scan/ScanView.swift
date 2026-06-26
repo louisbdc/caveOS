@@ -71,20 +71,26 @@ struct ScanView: View {
     // Clés des champs marqués « estimé » (déductions IA non encore confirmées).
     @State private var inferredFields: Set<String> = []
 
-    // Capture IA plein écran (preview AVFoundation + blueprint bouteille) et son
-    // pont d'action partagé pour déclencher le shutter sans recréer le contrôleur.
+    // Capture IA : la caméra (preview AVFoundation + blueprint) est affichée EN
+    // LIGNE via AICameraCaptureArea ; le proxy partagé déclenche l'obturateur sans
+    // recréer le contrôleur.
     @State private var captureProxy = CameraProxy()
-    @State private var showAICapture = false
-    // Import demandé depuis l'écran de capture : présenté après fermeture du cover
-    // (évite la course « présenter pendant la fermeture »).
-    @State private var pendingImport = false
     @State private var showPhotoPicker = false
+    // Analyse IA en cours : affiche l'overlay de chargement (progression simulée).
+    @State private var isAIScanning = false
 
     var body: some View {
         NavigationStack {
             // Le scan « Appareil » est gratuit et illimité : aucun gating global.
             // L'accès à l'IA est géré au niveau du sélecteur (quota / paywall).
             scannerContent
+                .overlay {
+                    if isAIScanning {
+                        ScanLoadingView()
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: isAIScanning)
                 .navigationTitle("Scanner une étiquette")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -94,9 +100,6 @@ struct ScanView: View {
                 }
                 .sheet(isPresented: $showPaywall) {
                     PaywallView()
-                }
-                .fullScreenCover(isPresented: $showAICapture, onDismiss: handleCaptureCoverDismiss) {
-                    aiCaptureCover
                 }
                 .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
                 .task {
@@ -108,32 +111,6 @@ struct ScanView: View {
                     }
                 }
         }
-    }
-
-    // MARK: - Capture IA (plein écran)
-
-    private var aiCaptureCover: some View {
-        AICaptureView(
-            proxy: captureProxy,
-            onCapture: { image in
-                lastImage = image
-                aiScanConsumed = false
-                showAICapture = false
-                Task { await analyzeImage(image) }
-            },
-            onImport: {
-                // L'appelant ferme le cover puis présente le PhotosPicker.
-                pendingImport = true
-                showAICapture = false
-            },
-            cameraStatus: $cameraStatus
-        )
-    }
-
-    private func handleCaptureCoverDismiss() {
-        guard pendingImport else { return }
-        pendingImport = false
-        showPhotoPicker = true
     }
 
     // MARK: - Contenu principal (scan autorisé)
@@ -165,10 +142,46 @@ struct ScanView: View {
     @ViewBuilder
     private var captureArea: some View {
         if scanEngine.isAI {
-            aiCapturePrompt
+            if hasAnalyzed, let image = lastImage {
+                capturedPreview(image)
+            } else {
+                AICameraCaptureArea(
+                    proxy: captureProxy,
+                    onCapture: { image in
+                        lastImage = image
+                        aiScanConsumed = false
+                        Task { await analyzeImage(image) }
+                    },
+                    onImport: { showPhotoPicker = true },
+                    cameraStatus: $cameraStatus
+                )
+            }
         } else {
             deviceCaptureArea
         }
+    }
+
+    /// Après analyse IA : fige la photo capturée (libère la session caméra) avec un
+    /// bouton « Reprendre » pour relancer la capture.
+    private func capturedPreview(_ image: UIImage) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+            Button {
+                hasAnalyzed = false
+                scanFeedback = nil
+            } label: {
+                Label("Reprendre", systemImage: "arrow.counterclockwise")
+                    .font(.footnote)
+                    .padding(Theme.Spacing.s)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
+            .tint(Theme.gold)
+            .padding(Theme.Spacing.s)
+        }
+        .clipped()
     }
 
     /// Aperçu de scan live « Appareil » (DataScanner Apple Vision, hors-ligne).
@@ -198,25 +211,6 @@ struct ScanView: View {
         } else {
             ScannerUnavailableView()
         }
-    }
-
-    /// Invite à la capture IA : la preview AVFoundation + blueprint vit dans
-    /// `AICaptureView`, présentée en plein écran via le bouton « Prendre une photo ».
-    private var aiCapturePrompt: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "sparkles.rectangle.stack")
-                .font(.system(size: 52))
-                .foregroundStyle(Theme.gold)
-                .accessibilityHidden(true)
-            Text("Scan par IA")
-                .font(.headline)
-            Text("Cadrez l'étiquette dans la silhouette puis prenez la photo. L'IA lit l'étiquette et complète les informations du vin.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(Theme.Spacing.l)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -260,26 +254,11 @@ struct ScanView: View {
         }
     }
 
-    /// Boutons d'action adaptés au moteur : capture/import en IA, import/analyse en local.
+    /// Boutons d'action adaptés au moteur. En mode IA, l'obturateur et l'import
+    /// vivent dans la caméra en ligne (`AICameraCaptureArea`) : aucun bouton ici.
     @ViewBuilder
     private var actionButtons: some View {
-        if scanEngine.isAI {
-            HStack(spacing: Theme.Spacing.m) {
-                Button {
-                    showAICapture = true
-                } label: {
-                    Label("Prendre une photo", systemImage: "camera")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("Importer", systemImage: "photo")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-        } else {
+        if !scanEngine.isAI {
             HStack(spacing: Theme.Spacing.m) {
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     Label("Importer une photo", systemImage: "photo")
@@ -313,7 +292,7 @@ struct ScanView: View {
 
             Text(scanEngine.isAI
                 ? (store.isPro
-                    ? "IA : Mistral + Gemini, lecture puis déduction."
+                    ? "IA : lecture de l'étiquette puis déduction œnologique."
                     : "IA : \(store.freeScansRemaining) scan(s) gratuit(s) restant(s).")
                 : "Analyse sur l'appareil, hors-ligne et gratuite.")
                 .font(.caption2)
@@ -591,6 +570,7 @@ struct ScanView: View {
         usedFallback = false
 
         if scanEngine.isAI, store.canUseAIScan() {
+            isAIScanning = true
             do {
                 let label = try await AIScanService.scan(image: uiImage)
                 recognizedLines = label.rawLines
@@ -602,9 +582,12 @@ struct ScanView: View {
                     store.consumeFreeScan()
                     aiScanConsumed = true
                 }
+                isAIScanning = false
                 applyAnalyzedLabel(label)
                 return
             } catch {
+                // Coupe l'overlay avant de basculer sur l'analyse embarquée.
+                isAIScanning = false
                 // Fallback silencieux vers l'analyse embarquée.
                 usedFallback = true
             }
