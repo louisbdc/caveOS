@@ -143,8 +143,9 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		// 100s borne la durée totale des handlers longs : /v1/scan (budget 50s) et
-		// /v1/scan/list (budget 90s) + marge réseau/encodage.
+		// WriteTimeout = 100s, intentionnel : le budget /v1/scan/list (listScanBudget = 90s)
+		// est le plus long chemin nominal. 100s = 90s + marge réseau/encodage.
+		// Go n'offre pas de WriteTimeout par route ; une middleware dédiée serait YAGNI ici.
 		WriteTimeout: 100 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}

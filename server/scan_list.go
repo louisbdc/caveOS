@@ -36,7 +36,11 @@ func enrichListItemsWith(ctx context.Context, items []ScanListItem, enrich enric
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return // contexte annulé : l'item reste inchangé (best-effort)
+			}
 			defer func() { <-sem }()
 			if res, err := enrich(ctx, out[i].ScanResult); err == nil {
 				out[i].ScanResult = res
