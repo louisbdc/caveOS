@@ -167,4 +167,22 @@ final class ApogeeEngineTests: XCTestCase {
         XCTAssertEqual(window?.peak, 2028)
         XCTAssertEqual(window?.drinkBy, 2035)
     }
+
+    /// Verrou de non-régression : la moyenne par cépage DIFFÈRE du défaut 3/8/15.
+    /// `window(for bottle:)` doit utiliser la moyenne des `Grape.apogee*`, pas
+    /// retomber sur le profil par défaut.
+    func testGrapeAverageDiffersFromDefaultProfile() {
+        let region = Region(name: "Test", qualityTier: .mid)
+        let g1 = Grape(name: "A", apogeeMin: 6, apogeePeak: 14, apogeeMax: 28)
+        let g2 = Grape(name: "B", apogeeMin: 8, apogeePeak: 18, apogeeMax: 32)
+        let wine = Wine(name: "Garde", region: region, grapes: [g1, g2])
+        // Moyenne des cépages : 7/16/30 (≠ défaut 3/8/15). mid ×1.0, ideal ×1.0.
+        let bottle = Bottle(wine: wine, vintage: 2020)
+        bottle.storageQuality = .ideal
+
+        let window = ApogeeEngine.window(for: bottle)
+        XCTAssertEqual(window?.drinkFrom, 2027)
+        XCTAssertEqual(window?.peak, 2036)
+        XCTAssertEqual(window?.drinkBy, 2050)
+    }
 }
