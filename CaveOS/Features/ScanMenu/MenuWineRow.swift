@@ -35,8 +35,22 @@ struct MenuWineRow: View {
                     Text(verbatim: "\(vintage)")
                         .font(.caption.weight(.semibold))
                 }
+                // Glass-only wines (price == nil, byGlass == true) show the glass price
+                // with a "/verre" suffix. When both exist, show bottle price and a smaller
+                // glass-price note. The glass price is intentionally NOT fed into
+                // MenuValueEngine: its scale is ~5-10× lower than bottle prices and
+                // would produce systematically misleading "bon Q/P" verdicts.
                 if let price = item.wine.price {
                     Text(formattedPrice(price))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let priceGlass = item.wine.priceGlass {
+                        Text("· verre \(formattedPrice(priceGlass))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let priceGlass = item.wine.priceGlass {
+                    Text("\(formattedPrice(priceGlass))/verre")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -77,6 +77,58 @@ final class MenuRankingEngineTests: XCTestCase {
         XCTAssertEqual(sorted.first?.wine.color, .red)
     }
 
+    // MARK: - Server peak window préféré au calcul local
+
+    // Verify that when peakFrom/peakTo are set on a ScannedMenuWine, the engine
+    // uses the server window (DB-backed) rather than the local ApogeeEngine estimate.
+    //
+    // Case 1 — Server says "yes", local would say "no":
+    //   vintage = 2026, local window ≈ [2029, 2039] → excludes 2026
+    //   server window = [2024, 2028] → includes 2026
+    //   Expected: drinkNow == true  (server wins)
+    //
+    // Case 2 — Server says "no", local would say "yes":
+    //   vintage = 2015, local window ≈ [2018, 2028] → includes 2026
+    //   server window = [2030, 2040] → excludes 2026
+    //   Expected: drinkNow == false  (server wins)
+    func testDrinkNowPrefersServerWindow() {
+        let now = 2026
+
+        // Case 1: server window covers now, local would not
+        let serverYes = ScannedMenuWine(
+            lineIndex: 0, producer: nil, wineName: "ServerYes",
+            vintage: 2026, appellation: nil, grapes: nil,
+            color: .red, wineType: nil, region: "R", country: nil,
+            peakFrom: 2024, peakTo: 2028,
+            price: 40.0, currency: nil, byGlass: false, priceGlass: nil
+        )
+        let rankedYes = MenuRankingEngine.rank(
+            [serverYes], dish: nil,
+            tierLookup: { _ in .mid },
+            cellarLookup: { _ in (0, nil) },
+            now: now
+        )
+        XCTAssertTrue(rankedYes[0].drinkNow,
+                      "Server window [2024,2028] should override local window and mark drinkNow = true")
+
+        // Case 2: server window excludes now, local would include it
+        let serverNo = ScannedMenuWine(
+            lineIndex: 1, producer: nil, wineName: "ServerNo",
+            vintage: 2015, appellation: nil, grapes: nil,
+            color: .red, wineType: nil, region: "R", country: nil,
+            peakFrom: 2030, peakTo: 2040,
+            price: 40.0, currency: nil, byGlass: false, priceGlass: nil
+        )
+        let rankedNo = MenuRankingEngine.rank(
+            [serverNo], dish: nil,
+            tierLookup: { _ in .mid },
+            cellarLookup: { _ in (0, nil) },
+            now: now
+        )
+        XCTAssertFalse(rankedNo[0].drinkNow,
+                       "Server window [2030,2040] should override local window and mark drinkNow = false")
+    }
+
     // MARK: - cellarLookup est reflété dans le résultat
     func testCellarLookupIsReflected() {
         let wines = [wine("EnCave", color: .red, region: "R", price: 40, line: 7)]

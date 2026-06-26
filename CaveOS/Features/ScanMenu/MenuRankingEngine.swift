@@ -27,13 +27,22 @@ enum MenuRankingEngine {
             let tier = tierLookup(w.region)
             let value = MenuValueEngine.verdict(tier: tier, price: w.price)
             let pairing = suggestion.map { MenuPairingScorer.score(wineColor: w.color, suggestion: $0) }
-            let window = ApogeeEngine.window(
-                vintage: w.vintage,
-                grapes: w.grapes ?? [],
-                regionTier: tier,
-                storage: .good
-            )
-            let drinkNow = window.map { now >= $0.drinkFrom && now <= $0.drinkBy } ?? false
+            // Prefer the server-computed peak window (DB-backed, more accurate);
+            // fall back to the local ApogeeEngine estimate when absent or invalid.
+            let drinkNow: Bool = {
+                if let from = w.peakFrom, let to = w.peakTo, from > 0, to >= from {
+                    return now >= from && now <= to
+                }
+                if let window = ApogeeEngine.window(
+                    vintage: w.vintage,
+                    grapes: w.grapes ?? [],
+                    regionTier: tier,
+                    storage: .good
+                ) {
+                    return now >= window.drinkFrom && now <= window.drinkBy
+                }
+                return false
+            }()
             let cellar = cellarLookup(w)
             return RankedMenuWine(
                 wine: w,

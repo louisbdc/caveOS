@@ -30,7 +30,11 @@ struct MenuResultsView: View {
     ]
 
     var body: some View {
-        NavigationStack {
+        // Capture ranked once per render: it's a computed property that triggers
+        // two SwiftData fetches, so evaluating it multiple times per body call
+        // (e.g. count text + ForEach) would cause ~4 fetches per keystroke.
+        let r = ranked
+        return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                     if degraded {
@@ -42,7 +46,7 @@ struct MenuResultsView: View {
                     }
                     dishSection
                     sortSection
-                    resultsSection
+                    resultsSection(r)
                 }
                 .padding(Theme.Spacing.m)
             }
@@ -111,7 +115,7 @@ struct MenuResultsView: View {
         }
     }
 
-    private var resultsSection: some View {
+    private func resultsSection(_ ranked: [RankedMenuWine]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text("\(ranked.count) vin\(ranked.count == 1 ? "" : "s")")
                 .font(.subheadline.weight(.semibold))
