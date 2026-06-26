@@ -27,6 +27,9 @@ enum MenuScanService {
         if let key = AIScanService.scanKey {
             request.setValue(key, forHTTPHeaderField: "X-CaveOS-Key")
         }
+        // Lire une carte entière est une opération longue (serveur ~90 s) : on lui
+        // accorde un timeout généreux pour ne pas la couper en plein vol.
+        request.timeoutInterval = 120
 
         let body: [String: String] = [
             "image": jpeg.base64EncodedString(),
@@ -34,9 +37,10 @@ enum MenuScanService {
         ]
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await Networking.retrying {
-            try await Networking.session.data(for: request)
-        }
+        // Un seul essai sur la session longue : relancer un scan de 90 s plusieurs
+        // fois épuiserait l'attente et le quota. En cas d'échec, l'appelant
+        // (`MenuScanView`) bascule sur le repli Vision local.
+        let (data, response) = try await Networking.longSession.data(for: request)
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
             throw URLError(.badServerResponse)

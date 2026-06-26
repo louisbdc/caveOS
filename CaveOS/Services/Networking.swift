@@ -6,10 +6,25 @@ import Foundation
 enum Networking {
 
     /// Session partagée avec timeouts courts : 15 s par requête, 30 s au total.
+    /// Adaptée aux appels rapides (scan d'une étiquette, enrichissement d'un vin).
     static let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
+    /// Session pour les opérations longues : 120 s par requête, 150 s au total.
+    ///
+    /// Le scan d'une carte des vins entière (extraction multi-vins + enrichissement
+    /// serveur) peut légitimement durer jusqu'à ~90 s côté serveur. La session
+    /// courte (15 s) coupait l'analyse en plein vol — le serveur recevait alors un
+    /// « context canceled ». Cette session laisse le temps au serveur de répondre.
+    static let longSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 150
         config.waitsForConnectivity = false
         return URLSession(configuration: config)
     }()
