@@ -8,6 +8,8 @@ struct MenuResultsView: View {
     @Environment(\.modelContext) private var context
 
     let wines: [ScannedMenuWine]
+    /// La carte dépassait la limite serveur : seuls les premiers vins sont remontés.
+    var truncated: Bool = false
 
     @State private var dish: String = ""
     @State private var sort: MenuSort = .value
@@ -105,6 +107,13 @@ struct MenuResultsView: View {
             Text("\(ranked.count) vin\(ranked.count == 1 ? "" : "s")")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
+
+            if truncated {
+                Label("Liste longue : seuls les premiers vins de la carte ont été lus.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             ForEach(ranked) { item in
                 MenuWineRow(item: item)

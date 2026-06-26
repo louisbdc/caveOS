@@ -10,6 +10,9 @@ struct PairingView: View {
     @State private var dishInput: String = ""
     @State private var suggestion: PairingSuggestion?
 
+    /// Présente le scan de carte des vins (feature orientée accord mets-vins).
+    @State private var showMenuScan = false
+
     private let quickCategories: [(label: String, dish: String, symbol: String)] = [
         ("Viande rouge", "viande rouge", "fork.knife"),
         ("Volaille", "poulet rôti", "bird"),
@@ -39,6 +42,18 @@ struct PairingView: View {
             }
             .navigationTitle("Accords mets-vins")
             .background(Theme.surface.opacity(0.4))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showMenuScan = true
+                    } label: {
+                        Label("Scanner une carte des vins", systemImage: "doc.viewfinder")
+                    }
+                }
+            }
+            .sheet(isPresented: $showMenuScan) {
+                MenuScanView()
+            }
         }
     }
 
