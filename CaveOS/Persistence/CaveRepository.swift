@@ -94,4 +94,26 @@ final class CaveRepository {
     func count<T: PersistentModel>(of type: T.Type) -> Int {
         (try? context.fetchCount(FetchDescriptor<T>())) ?? 0
     }
+
+    // MARK: - Matching flou (carte restaurant → cave)
+
+    /// Retourne le premier `Wine` dont le nom et le producteur correspondent
+    /// (comparaison diacritic-insensitive via `MenuMatching`).
+    /// Le paramètre `vintage` est conservé pour commodité du site d'appel ;
+    /// `Wine` étant indépendant du millésime (qui vit sur `Bottle`), il n'est pas utilisé dans le filtre.
+    func findWine(producer: String?, name: String?, vintage: Int?) -> Wine? {
+        fetchWines().first { wine in
+            MenuMatching.matches(
+                candidateProducer: producer,
+                candidateName: name,
+                wineProducer: wine.producer?.name,
+                wineName: wine.name)
+        }
+    }
+
+    /// Retourne la `Region` dont le nom correspond exactement (diacritic-insensitive).
+    func region(named name: String) -> Region? {
+        let target = MenuMatching.normalize(name)
+        return regions().first { MenuMatching.normalize($0.name) == target }
+    }
 }
