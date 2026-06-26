@@ -107,10 +107,35 @@ func newScanProviders() map[string]scanProvider {
 	return providers
 }
 
-// pass1Order fixe l'ordre déterministe des fournisseurs de lecture. Il sert aussi
-// de priorité de tie-break dans la fusion (le premier l'emporte à valeur égale) :
-// Mistral OCR d'abord car il lit les chiffres et accents littéralement.
-var pass1Order = []string{"mistral", "gemini"}
+// scanPass1Order renvoie l'ordre des fournisseurs de LECTURE (passe 1) actifs.
+// Configurable via SCAN_PASS1 (liste séparée par des virgules). Défaut : "gemini"
+// seul (rapide, JSON structuré fiable, ~90 % des étiquettes). Mettre "mistral"
+// pour l'OCR haute précision (écritures anciennes/gothiques, + lent/cher), ou
+// "mistral,gemini" pour réactiver la fusion des deux lectures. L'ordre sert aussi
+// de priorité de tie-break dans la fusion.
+func scanPass1Order() []string {
+	return providerOrderFromEnv("SCAN_PASS1", "gemini")
+}
+
+// providerOrderFromEnv lit une liste de fournisseurs (séparés par des virgules)
+// depuis une variable d'environnement, avec repli sur def. Normalise en minuscules
+// et ignore les entrées vides.
+func providerOrderFromEnv(env, def string) []string {
+	v := strings.TrimSpace(os.Getenv(env))
+	if v == "" {
+		v = def
+	}
+	out := make([]string, 0, 2)
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, def)
+	}
+	return out
+}
 
 const (
 	pass1Timeout = 35 * time.Second // budget par fournisseur image (passe 1)
@@ -229,8 +254,8 @@ func (s *server) handleScan(w http.ResponseWriter, r *http.Request) {
 // son propre index out[i] : aucune course. La fusion se fait après wg.Wait().
 // Renvoie errNoScanProvider si aucun fournisseur n'est configuré.
 func (s *server) runPass1(ctx context.Context, image, mime string) ([]providerResult, error) {
-	providers := make([]scanProvider, 0, len(pass1Order))
-	for _, n := range pass1Order {
+	providers := make([]scanProvider, 0, len(s.pass1Order))
+	for _, n := range s.pass1Order {
 		if p, ok := s.scanProviders[n]; ok && p.configured() {
 			providers = append(providers, p)
 		}

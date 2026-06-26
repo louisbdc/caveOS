@@ -78,6 +78,7 @@ type server struct {
 	logger          *slog.Logger
 	scanProviders   map[string]scanProvider // passe 1 : lecture d'image (OCR/vision)
 	enrichProviders []enrichProvider        // passe 2 : déduction texte (primaire → repli)
+	pass1Order      []string                // passe 1 : fournisseurs actifs (cf. SCAN_PASS1)
 	// imageUnusable filtre les images inexploitables (vides/minuscules) avant
 	// d'appeler les modèles — garde-fou anti-hallucination. Injectable (nil en
 	// test = désactivé). Voir scan_image.go.
@@ -109,6 +110,7 @@ func main() {
 		logger:          logger,
 		scanProviders:   newScanProviders(),
 		enrichProviders: newEnrichProviders(),
+		pass1Order:      scanPass1Order(),
 		imageUnusable:   isUnusableImage,
 	}
 

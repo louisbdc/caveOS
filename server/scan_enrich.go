@@ -78,10 +78,25 @@ const enrichInstruction = "Tu es sommelier expert. On te fournit les champs LU s
 	"Renseigne seulement ce que tu peux déduire avec une confiance raisonnable ; mets null/0 sinon. " +
 	"Ne modifie pas et ne répète pas les champs lus. Respecte STRICTEMENT le schéma JSON."
 
-// newEnrichProviders construit le registre ordonné des fournisseurs de la passe 2
-// (primaire d'abord, repli ensuite) : gemini-3.1-flash-lite puis mistral-small.
+// newEnrichProviders construit l'ordre des fournisseurs de DÉDUCTION (passe 2).
+// Configurable via SCAN_PASS2 (liste séparée par des virgules). Défaut : "mistral"
+// seul (mistral-small : meilleure culture œnologique FR, apogée plus fiable).
+// Ex. "gemini" pour flash-lite, ou "mistral,gemini" pour un repli automatique.
 func newEnrichProviders() []enrichProvider {
-	return []enrichProvider{newGeminiEnrichProvider(), newMistralEnrichProvider()}
+	ctors := map[string]func() enrichProvider{
+		"gemini":  func() enrichProvider { return newGeminiEnrichProvider() },
+		"mistral": func() enrichProvider { return newMistralEnrichProvider() },
+	}
+	out := make([]enrichProvider, 0, 2)
+	for _, n := range providerOrderFromEnv("SCAN_PASS2", "mistral") {
+		if c, ok := ctors[n]; ok {
+			out = append(out, c())
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, newMistralEnrichProvider())
+	}
+	return out
 }
 
 // --- Orchestration -----------------------------------------------------------

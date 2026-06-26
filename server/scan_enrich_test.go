@@ -34,13 +34,16 @@ func (f fakeEnrichProvider) enrich(_ context.Context, _ enrichInput) (enrichOutp
 // passent par newSeededServer.
 func newTestServerFull(scan []scanProvider, enrich []enrichProvider) *server {
 	reg := map[string]scanProvider{}
+	order := make([]string, 0, len(scan))
 	for _, p := range scan {
 		reg[p.name()] = p
+		order = append(order, p.name())
 	}
 	return &server{
 		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 		scanProviders:   reg,
 		enrichProviders: enrich,
+		pass1Order:      order,
 	}
 }
 

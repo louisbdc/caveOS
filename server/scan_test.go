@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -29,18 +30,27 @@ func (f fakeProvider) scan(_ context.Context, _, _ string) (ScanResult, error) {
 
 func newTestServer(providers ...scanProvider) *server {
 	reg := map[string]scanProvider{}
+	order := make([]string, 0, len(providers))
 	for _, p := range providers {
 		reg[p.name()] = p
+		order = append(order, p.name())
 	}
 	return &server{
 		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		scanProviders: reg,
+		pass1Order:    order,
 	}
 }
+
+var testClientSeq int
 
 func postScan(t *testing.T, srv *server, body string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/scan", strings.NewReader(body))
+	// IP unique par appel : scanLimiter est un global partagé entre tests ; sans
+	// ça l'accumulation des requêtes finirait par déclencher un 429 parasite.
+	testClientSeq++
+	req.RemoteAddr = fmt.Sprintf("10.0.0.%d:1234", testClientSeq)
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -372,5 +382,45 @@ func TestHandleScanRejectsUnusableImageUpfront(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &got)
 	if got.Producer != "" {
 		t.Fatalf("résultat devait être vide (garde-fou image), obtenu: %+v", got)
+	}
+}
+
+func TestScanPass1OrderDefaultAndEnv(t *testing.T) {
+	if got := scanPass1Order(); len(got) != 1 || got[0] != "gemini" {
+		t.Fatalf("défaut attendu [gemini], obtenu %v", got)
+	}
+	t.Setenv("SCAN_PASS1", "mistral, gemini")
+	if got := scanPass1Order(); len(got) != 2 || got[0] != "mistral" || got[1] != "gemini" {
+		t.Fatalf("SCAN_PASS1 attendu [mistral gemini], obtenu %v", got)
+	}
+}
+
+func TestHandleScanDefaultUsesGeminiOnly(t *testing.T) {
+	// Par défaut, seule la lecture Gemini est active (passe 1) même si Mistral est
+	// enregistré : provider "gemini", données de Gemini.
+	srv := newTestServer(
+		fakeProvider{nm: "mistral", conf: true, result: ScanResult{Producer: "Mistral"}},
+		fakeProvider{nm: "gemini", conf: true, result: ScanResult{Producer: "Gemini"}},
+	)
+	srv.pass1Order = scanPass1Order() // défaut : gemini seul
+	rec := postScan(t, srv, `{"image":"abc"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attendu 200, obtenu %d", rec.Code)
+	}
+	var got ScanResult
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.Provider != "gemini" || got.Producer != "Gemini" {
+		t.Fatalf("attendu gemini seul, obtenu: %+v", got)
+	}
+}
+
+func TestNewEnrichProvidersDefaultIsMistral(t *testing.T) {
+	if ps := newEnrichProviders(); len(ps) != 1 || ps[0].name() != "mistral" {
+		t.Fatalf("passe 2 par défaut attendue [mistral], obtenu %d provider(s)", len(ps))
+	}
+	t.Setenv("SCAN_PASS2", "gemini,mistral")
+	ps := newEnrichProviders()
+	if len(ps) != 2 || ps[0].name() != "gemini" || ps[1].name() != "mistral" {
+		t.Fatalf("SCAN_PASS2 attendu [gemini mistral], obtenu %d provider(s)", len(ps))
 	}
 }

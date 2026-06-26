@@ -7,8 +7,9 @@ import "strings"
 // mergePass1 combine les ScanResult renvoyés par les fournisseurs de la passe 1
 // (mistral OCR + gemini). La fusion est purement fonctionnelle : on lit les
 // résultats en entrée et on construit un nouveau ScanResult sans muter l'entrée.
-// L'ordre des `successes` suit pass1Order, donc le premier (mistral/OCR) gagne
-// les tie-breaks — il lit chiffres et accents le plus littéralement.
+// L'ordre des `successes` suit SCAN_PASS1, donc le premier fournisseur configuré
+// gagne les tie-breaks. Par défaut un seul fournisseur (gemini) est actif : la
+// fusion est alors un simple passthrough ; elle ne sert qu'en mode multi-lecture.
 
 // maxGrapes plafonne la liste de cépages fusionnée (garde-fou anti-bruit).
 const maxGrapes = 12
