@@ -25,6 +25,43 @@ struct ScannedMenuWine: Identifiable, Decodable {
         case region, country, peakFrom, peakTo, price, currency, byGlass, priceGlass, lineIndex
     }
 
+    /// Initialiseur direct (repli local, prévisualisation) — n'implique pas de décodage JSON.
+    init(
+        lineIndex: Int,
+        producer: String?,
+        wineName: String?,
+        vintage: Int?,
+        appellation: String?,
+        grapes: [String]?,
+        color: WineColor?,
+        wineType: WineType?,
+        region: String?,
+        country: String?,
+        peakFrom: Int?,
+        peakTo: Int?,
+        price: Double?,
+        currency: String?,
+        byGlass: Bool,
+        priceGlass: Double?
+    ) {
+        self.lineIndex = lineIndex
+        self.producer = producer
+        self.wineName = wineName
+        self.vintage = vintage
+        self.appellation = appellation
+        self.grapes = grapes
+        self.color = color
+        self.wineType = wineType
+        self.region = region
+        self.country = country
+        self.peakFrom = peakFrom
+        self.peakTo = peakTo
+        self.price = price
+        self.currency = currency
+        self.byGlass = byGlass
+        self.priceGlass = priceGlass
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         producer = try c.decodeIfPresent(String.self, forKey: .producer)
@@ -50,6 +87,13 @@ struct MenuScanResult: Decodable {
     let wines: [ScannedMenuWine]
     let truncated: Bool
     let notWineList: Bool
+
+    /// Initialiseur direct (repli local, tests).
+    init(wines: [ScannedMenuWine], truncated: Bool, notWineList: Bool) {
+        self.wines = wines
+        self.truncated = truncated
+        self.notWineList = notWineList
+    }
 
     private enum CodingKeys: String, CodingKey {
         case wines, truncated, notWineList

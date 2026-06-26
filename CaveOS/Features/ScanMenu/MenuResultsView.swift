@@ -10,6 +10,8 @@ struct MenuResultsView: View {
     let wines: [ScannedMenuWine]
     /// La carte dépassait la limite serveur : seuls les premiers vins sont remontés.
     var truncated: Bool = false
+    /// `true` si le résultat provient du repli Vision local (pas du serveur IA).
+    var degraded: Bool = false
 
     @State private var dish: String = ""
     @State private var sort: MenuSort = .value
@@ -31,6 +33,13 @@ struct MenuResultsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                    if degraded {
+                        Label("Résultat en mode local — connexion indisponible. Prix et enrichissements non disponibles.", systemImage: "wifi.slash")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .cardStyle()
+                    }
                     dishSection
                     sortSection
                     resultsSection

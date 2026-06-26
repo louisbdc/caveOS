@@ -9,13 +9,14 @@ import UIKit
 ///
 /// L'accès à l'IA est gardé par le freemium (`StoreManager`) : un crédit n'est
 /// décompté QUE pour une vraie carte des vins (jamais sur `notWineList`).
-/// Le repli hors-ligne (Vision sur l'appareil) et les bannières d'erreur
-/// enrichies viendront en Task 13 ; ici l'état d'erreur reste volontairement
-/// minimal (message + « Réessayer »).
+/// En cas d'échec réseau ou de quota épuisé, le repli `MenuDeviceFallback`
+/// (Vision sur l'appareil) est proposé automatiquement avec une bannière
+/// « mode dégradé ».
 @MainActor
 struct MenuScanView: View {
 
     @Environment(StoreManager.self) private var store
+    @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
     /// États du flux : capture → analyse → carte invalide / erreur.
@@ -44,6 +45,13 @@ struct MenuScanView: View {
     /// Résultat conservé pour alimenter la feuille de résultats (vins + troncature).
     @State private var result: MenuScanResult?
 
+    /// `true` si le résultat provient du repli local (pas du serveur).
+    @State private var degradedResult = false
+
+    // Référentiels chargés depuis la base pour le repli local.
+    @State private var knownAppellations: [String] = []
+    @State private var knownGrapes: [String] = []
+
     var body: some View {
         NavigationStack {
             captureArea
@@ -66,13 +74,16 @@ struct MenuScanView: View {
                 }
                 .sheet(isPresented: $showResults) {
                     if let result {
-                        MenuResultsView(wines: result.wines, truncated: result.truncated)
+                        MenuResultsView(wines: result.wines, truncated: result.truncated, degraded: degradedResult)
                     }
                 }
                 .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
                 .onChange(of: photoItem) { _, newValue in
                     guard let newValue else { return }
                     Task { await processPhoto(newValue) }
+                }
+                .task {
+                    loadReferenceData()
                 }
         }
     }
@@ -128,13 +139,37 @@ struct MenuScanView: View {
         .padding(Theme.Spacing.l)
     }
 
+    // MARK: - Données de référence
+
+    private func loadReferenceData() {
+        let repository = CaveRepository(context: context)
+        knownAppellations = repository.appellations().map(\.name)
+        knownGrapes = repository.grapes().map(\.name)
+    }
+
     // MARK: - Analyse
 
     /// Analyse une photo de carte via le serveur, sous garde freemium.
     /// Décompte un crédit uniquement pour une vraie carte des vins.
+    /// En cas d'échec réseau ou de quota épuisé, bascule sur le repli Vision local.
     private func scan(_ image: UIImage) async {
+        degradedResult = false
+
+        // Quota épuisé : proposer le repli local gratuit plutôt qu'un hard paywall.
         guard store.canUseAIScan() else {
-            showPaywall = true
+            let wines = await MenuDeviceFallback.scan(
+                image: image,
+                knownAppellations: knownAppellations,
+                knownGrapes: knownGrapes
+            )
+            if wines.isEmpty {
+                showPaywall = true
+            } else {
+                result = MenuScanResult(wines: wines, truncated: false, notWineList: false)
+                degradedResult = true
+                phase = .idle
+                showResults = true
+            }
             return
         }
 
@@ -151,12 +186,28 @@ struct MenuScanView: View {
                 showResults = true
             }
         } catch {
-            phase = .error("La lecture de la carte a échoué. Vérifiez votre connexion, puis réessayez.")
+            // Échec réseau : repli Vision local.
+            let wines = await MenuDeviceFallback.scan(
+                image: image,
+                knownAppellations: knownAppellations,
+                knownGrapes: knownGrapes
+            )
+            result = MenuScanResult(wines: wines, truncated: false, notWineList: wines.isEmpty)
+            degradedResult = true
+            if wines.isEmpty {
+                phase = .error("La lecture de la carte a échoué hors-ligne. Vérifiez votre connexion.")
+            } else {
+                phase = .idle
+                showResults = true
+            }
         }
     }
 
     /// Charge l'image importée puis lance l'analyse.
     private func processPhoto(_ item: PhotosPickerItem) async {
+        // Réinitialiser dans tous les cas : sans cela, re-sélectionner la même photo
+        // après une erreur ne déclencherait pas `onChange(of: photoItem)`.
+        defer { photoItem = nil }
         do {
             guard let data = try await item.loadTransferable(type: Data.self),
                   let uiImage = UIImage(data: data) else {
