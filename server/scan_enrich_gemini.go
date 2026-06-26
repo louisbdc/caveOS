@@ -38,7 +38,7 @@ func (p *geminiEnrichProvider) configured() bool { return p.apiKey != "" }
 var geminiEnrichSchema = map[string]any{
 	"type": "OBJECT",
 	"properties": map[string]any{
-		"color":       map[string]any{"type": "STRING", "enum": wineColorList, "nullable": true},
+		"color":       map[string]any{"type": "STRING", "enum": scanColorList, "nullable": true},
 		"wineType":    map[string]any{"type": "STRING", "enum": wineTypeList, "nullable": true},
 		"country":     map[string]any{"type": "STRING", "nullable": true},
 		"region":      map[string]any{"type": "STRING", "nullable": true},

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // --- Scan: extraction structurée d'étiquette par double passe IA --------------
@@ -43,7 +44,7 @@ type ScanResult struct {
 	ABV         string   `json:"abv,omitempty"`
 
 	// --- DÉDUIT (passe 2 / DB locale, jamais lu directement) ------------
-	Color       string   `json:"color,omitempty"`    // red|white|rose|sparkling|sweet|fortified|orange (WineColor.rawValue)
+	Color       string   `json:"color,omitempty"`    // robe déduite : red|white|rose|orange (scanColorList) ; le style va dans WineType
 	WineType    string   `json:"wineType,omitempty"` // still|sparkling|fortified|sweet (WineType.rawValue)
 	Country     string   `json:"country,omitempty"`
 	Region      string   `json:"region,omitempty"`
@@ -88,10 +89,13 @@ var labelFields = []string{"producer", "wineName", "vintage", "appellation", "gr
 // labelInstruction est l'invite commune décrivant la tâche d'extraction.
 const labelInstruction = "Tu analyses la photo d'une étiquette de bouteille de vin. " +
 	"Extrais les champs suivants en respectant strictement le schéma JSON fourni : " +
-	"producer (domaine/château), wineName (nom de la cuvée), vintage (millésime, année sur 4 chiffres en entier), " +
-	"appellation, grapes (liste des cépages), format (ex. \"75 cl\", \"Magnum (1,5 L)\"), abv (degré, ex. \"13,5 %\"), " +
+	"producer (nom complet du producteur/domaine/château/maison, AVEC ses suffixes tels qu'écrits sur l'étiquette, ex. \"& Fils\", \"Père & Fils\", \"et Fils\"), " +
+	"wineName (UNIQUEMENT le nom propre de la cuvée, ex. \"Tradition\", \"Grande Réserve\" ; NE recopie PAS le nom du producteur dans ce champ ; n'y mets PAS les mentions génériques de dosage ou de gamme comme \"Brut\", \"Demi-sec\", \"Grande Cuvée\", \"Réserve\" sauf si elles font réellement partie du nom propre de la cuvée), " +
+	"vintage (millésime, année sur 4 chiffres en entier ; laisse 0 pour un brut sans année / non millésimé / \"BSA\"), " +
+	"appellation, grapes (liste des cépages SEULEMENT s'ils sont explicitement imprimés sur l'étiquette ; sinon laisse la liste vide — ne devine JAMAIS l'assemblage), " +
+	"format (ex. \"75 cl\", \"Magnum (1,5 L)\"), abv (degré, ex. \"13,5 %\"), " +
 	"isWineLabel (true UNIQUEMENT si l'image montre réellement une étiquette de vin lisible). " +
-	"Laisse un champ vide (ou 0 pour vintage) si l'information est absente. N'invente jamais de valeur. " +
+	"Laisse un champ vide (ou 0 pour vintage) si l'information est absente. N'invente jamais de valeur ni ne recopie un champ dans un autre. " +
 	"Si l'image est illisible, floue, vide, ou n'est pas une étiquette de vin, mets isWineLabel=false et laisse " +
 	"TOUS les autres champs vides — n'invente JAMAIS un vin connu (par ex. ne réponds pas \"Château Margaux\")."
 
@@ -391,15 +395,46 @@ func (l aiLabel) toResult() ScanResult {
 		}
 	}
 	return ScanResult{
-		Producer:    strings.TrimSpace(l.Producer),
-		WineName:    strings.TrimSpace(l.WineName),
+		Producer:    normalizeCase(l.Producer),
+		WineName:    normalizeCase(l.WineName),
 		Vintage:     parseVintage(anyToString(l.Vintage)),
-		Appellation: strings.TrimSpace(l.Appellation),
+		Appellation: normalizeCase(l.Appellation),
 		Grapes:      grapes,
 		Format:      strings.TrimSpace(l.Format),
 		ABV:         strings.TrimSpace(l.ABV),
 		IsWineLabel: l.IsWineLabel,
 	}
+}
+
+// normalizeCase remet en casse « Titre » une chaîne écrite TOUT EN MAJUSCULES,
+// fréquent sur les étiquettes (ex. Gemini renvoie "DELAGNE & FILS", "TRADITION").
+// Une chaîne contenant déjà une minuscule est laissée telle quelle (casse voulue,
+// ex. "Château Margaux"). Les particules courantes (de, du, la…) restent en
+// minuscules sauf en première position. Travaille sur les runes (accents préservés).
+func normalizeCase(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || strings.IndexFunc(s, unicode.IsLower) >= 0 {
+		return s
+	}
+	particles := map[string]bool{"de": true, "du": true, "des": true, "la": true, "le": true, "les": true, "et": true, "d": true, "au": true, "aux": true}
+	words := strings.Fields(strings.ToLower(s))
+	for i, w := range words {
+		if i > 0 && particles[w] {
+			continue
+		}
+		words[i] = capitalizeFirst(w)
+	}
+	return strings.Join(words, " ")
+}
+
+// capitalizeFirst met la première rune en majuscule (le reste inchangé).
+func capitalizeFirst(w string) string {
+	r := []rune(w)
+	if len(r) == 0 {
+		return w
+	}
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
 }
 
 // parseVintage extrait une année plausible d'une chaîne libre. Renvoie 0 si rien

@@ -59,6 +59,22 @@ func postScan(t *testing.T, srv *server, body string, headers map[string]string)
 	return rec
 }
 
+func TestNormalizeCase(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"DELAGNE & FILS", "Delagne & Fils"},       // tout-majuscules -> Titre
+		{"TRADITION", "Tradition"},                 // mot unique
+		{"CHÂTEAU DES TOURS", "Château des Tours"}, // particule "des" en minuscule + accent préservé
+		{"Château Margaux", "Château Margaux"},     // casse déjà voulue -> inchangé
+		{"  CHAMPAGNE  ", "Champagne"},             // trim + Titre
+		{"", ""},                                   // vide
+	}
+	for _, c := range cases {
+		if got := normalizeCase(c.in); got != c.want {
+			t.Errorf("normalizeCase(%q)=%q, attendu %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestHandleScanRejectsBadSecret(t *testing.T) {
 	t.Setenv("CAVEOS_SCAN_KEY", "topsecret")
 	srv := newTestServer(fakeProvider{nm: "mistral", conf: true})

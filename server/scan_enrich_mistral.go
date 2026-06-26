@@ -54,7 +54,7 @@ var mistralEnrichSchema = map[string]any{
 	"type":                 "object",
 	"additionalProperties": false,
 	"properties": map[string]any{
-		"color":       nullableStringEnum(wineColorList),
+		"color":       nullableStringEnum(scanColorList),
 		"wineType":    nullableStringEnum(wineTypeList),
 		"country":     map[string]any{"type": []string{"string", "null"}},
 		"region":      map[string]any{"type": []string{"string", "null"}},

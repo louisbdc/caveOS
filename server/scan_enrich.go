@@ -50,10 +50,17 @@ type enrichProvider interface {
 
 // Ensembles autorisés des valeurs déduites, alignés sur les enums Swift
 // (WineColor.rawValue / WineType.rawValue). Toute valeur hors-liste est droppée.
+//
+// scanColorList n'expose à la DÉDUCTION que les vraies couleurs de ROBE. On
+// EXCLUT volontairement sparkling/sweet/fortified : ces valeurs existent dans
+// WineColor côté app (saisie manuelle) mais ce sont des STYLES, pas des
+// couleurs. Un champagne a une robe "white" (ou "rose") et un style "sparkling"
+// porté par wineType ; sans cette séparation il ressortait « Couleur =
+// Effervescent », ce qui est faux.
 var (
-	wineColorList = []string{"red", "white", "rose", "sparkling", "sweet", "fortified", "orange"}
+	scanColorList = []string{"red", "white", "rose", "orange"}
 	wineTypeList  = []string{"still", "sparkling", "fortified", "sweet"}
-	wineColors    = toEnumSet(wineColorList)
+	scanColors    = toEnumSet(scanColorList)
 	wineTypes     = toEnumSet(wineTypeList)
 )
 
@@ -69,8 +76,8 @@ func toEnumSet(values []string) map[string]bool {
 // lu/déduit : le modèle ne renseigne QUE les champs nouveaux, en estimation.
 const enrichInstruction = "Tu es sommelier expert. On te fournit les champs LU sur une étiquette de vin (déjà extraits, fiables). " +
 	"À partir de ta connaissance du vin, DÉDUIS uniquement les champs suivants : " +
-	"color (couleur: red, white, rose, sparkling, sweet, fortified, orange), " +
-	"wineType (élaboration: still, sparkling, fortified, sweet), " +
+	"color (couleur de la ROBE uniquement : red, white, rose, orange — un champagne ou tout effervescent est en général white, ou rose s'il est rosé ; ne mets JAMAIS l'effervescence, le moelleux ou le fortifié dans ce champ), " +
+	"wineType (élaboration/style : still=tranquille, sparkling=effervescent, fortified=fortifié, sweet=liquoreux — c'est ICI que va l'effervescence d'un champagne ou d'un crémant), " +
 	"country (pays), region (région viticole), " +
 	"grapesGuess (cépages PROBABLES de l'appellation — n'inclus PAS les cépages déjà fournis), " +
 	"peakFrom et peakTo (fenêtre d'apogée en années civiles, basée sur millésime/cépage/région). " +
@@ -111,7 +118,7 @@ func (s *server) applyPass2(ctx context.Context, r ScanResult) ScanResult {
 	// 1) Passe 2 LLM (primaire puis repli). On n'écrit QUE des champs déduits,
 	//    et on ne marque inférés que ceux réellement renseignés (jamais un LU).
 	if out, ok := s.runPass2(ctx, toEnrichInput(r)); ok {
-		if c := keepIfEnum(out.Color, wineColors); c != "" {
+		if c := keepIfEnum(out.Color, scanColors); c != "" {
 			r.Color, inferred["color"] = c, true
 		}
 		if t := keepIfEnum(out.WineType, wineTypes); t != "" {

@@ -165,12 +165,15 @@ func TestKeepIfEnum(t *testing.T) {
 		set  map[string]bool
 		want string
 	}{
-		{"Red", wineColors, "red"}, // normalise la casse
-		{"  white ", wineColors, "white"},
-		{"purple", wineColors, ""}, // hors-liste
-		{"rosé", wineColors, ""},   // accentué hors-liste (l'enum est "rose")
+		{"Red", scanColors, "red"}, // normalise la casse
+		{"  white ", scanColors, "white"},
+		{"purple", scanColors, ""},    // hors-liste
+		{"rosé", scanColors, ""},      // accentué hors-liste (l'enum est "rose")
+		{"sparkling", scanColors, ""}, // style, pas une couleur de robe -> rejeté
+		{"sweet", scanColors, ""},     // idem
 		{"STILL", wineTypes, "still"},
-		{"frizzante", wineTypes, ""}, // hors-liste
+		{"sparkling", wineTypes, "sparkling"}, // le style reste valide côté wineType
+		{"frizzante", wineTypes, ""},          // hors-liste
 	}
 	for _, c := range cases {
 		if got := keepIfEnum(c.v, c.set); got != c.want {
@@ -198,6 +201,36 @@ func TestLocalWindowOverridesLLM(t *testing.T) {
 	}
 	if !containsString(got.InferredFields, "peak") {
 		t.Errorf("peak doit être marqué inféré: %v", got.InferredFields)
+	}
+}
+
+// TestApplyPass2SeparatesColorFromStyle vérifie qu'une déduction de type
+// "effervescent" ne pollue pas la couleur : si le modèle renvoie color="sparkling"
+// (un style, pas une robe), la couleur est droppée tandis que wineType="sparkling"
+// est conservé ; une vraie robe ("white") passe normalement. C'est le correctif du
+// bug « Couleur = Effervescent » observé sur un champagne.
+func TestApplyPass2SeparatesColorFromStyle(t *testing.T) {
+	cases := []struct {
+		name      string
+		out       enrichOutput
+		wantColor string
+		wantType  string
+	}{
+		{"style en couleur droppé", enrichOutput{Color: "sparkling", WineType: "sparkling"}, "", "sparkling"},
+		{"robe valide conservée", enrichOutput{Color: "white", WineType: "sparkling"}, "white", "sparkling"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := newSeededServer(t, fakeEnrichProvider{nm: "gemini", conf: true, out: c.out})
+			// Sans millésime : localWindow sort tôt et ne touche pas color/wineType.
+			got := srv.applyPass2(context.Background(), ScanResult{Appellation: "Champagne"})
+			if got.Color != c.wantColor {
+				t.Errorf("color=%q, attendu %q", got.Color, c.wantColor)
+			}
+			if got.WineType != c.wantType {
+				t.Errorf("wineType=%q, attendu %q", got.WineType, c.wantType)
+			}
+		})
 	}
 }
 
